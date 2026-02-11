@@ -1,8 +1,6 @@
 # my-ai-gen-demo
 分享一些我遇到的小需求功能，使用ai实现代码
 
-这是一个为您定制的 GitHub `README.md` 文档，涵盖了项目介绍、核心特性、技术亮点（Web Worker）、使用方法以及筛选语法说明。你可以直接复制到项目的根目录下。
-
 ---
 
 # 🚀 VTable High-Performance Excel Filter
