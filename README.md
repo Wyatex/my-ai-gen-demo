@@ -3,78 +3,62 @@
 
 ---
 
-# 🚀 VTable High-Performance Excel Filter
-# [VTable Excel 高性能实时筛选器 (百万级数据版)](./excel-display.html)
+这份代码实现了一个非常实用的功能：**高性能 Web Excel 查看与检索工具**。它结合了 VisActor VTable 的高性能渲染和 Web Worker 的多线程处理能力。
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg) ![VTable](https://img.shields.io/badge/Powered%20by-VTable-orange) ![SheetJS](https://img.shields.io/badge/Powered%20by-SheetJS-green)
+以下是为你准备的 GitHub `README.md` 模板，采用了专业且易读的排版：
 
-一个轻量级、高性能的 Excel/CSV 文件查看与筛选工具。基于 **VTable** 渲染引擎与 **Web Worker** 多线程技术，支持在浏览器端流畅处理百万行级数据，提供复杂的布尔逻辑筛选（与/或/非/括号）及 Excel 风格的复制体验。
+---
 
-> **无需安装任何环境，单文件 HTML 即可运行。**
+## 🚀 [VTable Excel Million-Level Data Filter](./excel-display.html)
 
-## ✨ 核心特性 (Features)
+**一个基于 Web Worker 和 VTable 构建的高性能百万级 Excel 数据实时筛选查看器。**
 
-*   **⚡ 极致性能 (High Performance)**: 采用 **Web Worker** 将数据预处理与筛选逻辑移至后台线程，主界面 UI 永不卡顿，轻松应对 100万+ 行数据。
-*   **🔍 复杂逻辑筛选 (Advanced Filtering)**: 支持包含（Include）与排除（Exclude）双重条件。
-    *   支持 `&` (AND)、`|` (OR) 逻辑运算符。
-    *   支持 `()` 括号嵌套优先级。
-*   **📂 广泛格式支持**: 支持拖拽上传 `.xlsx`, `.xls`, `.csv` 文件。
-*   **📋 Excel 交互体验**:
-    *   虚拟滚动技术，丝滑浏览海量数据。
-    *   支持框选单元格（多选）。
-    *   支持 `Ctrl + C` 复制选中内容，可直接粘贴回 Excel。
-    *   支持 `Ctrl + A` 全选。
-*   **🚀 零依赖部署**: 所有逻辑封装在一个 `.html` 文件中（依赖通过 CDN 加载），双击即用。
+### 📖 简介
 
-## 🛠️ 技术原理 (Architecture)
+本项目是一个纯前端的 Excel 文件处理工具，专门针对**百万量级数据**进行了优化。它允许用户直接拖拽 Excel 文件，在浏览器本地进行极速的关键词筛选（支持复杂的逻辑表达式），并提供类似于 Excel 的流畅交互体验。
 
-为了解决浏览器主线程处理大数据时的“假死”问题，本项目采用了以下架构优化：
+#### 核心亮点
 
-1.  **Web Worker 多线程**: 数据的解析、文本预处理（全小写缓存）以及复杂的布尔逻辑匹配全部在 Worker 线程中执行。
-2.  **文本预处理缓存**: 文件加载时自动生成搜索索引，后续筛选无需重复遍历对象属性，大幅提升响应速度。
-3.  **VTable 虚拟渲染**: 仅渲染可视区域内的 DOM 元素，内存占用低，渲染性能极高。
+* **百万级渲染**：利用 [VisActor VTable](https://visactor.io/vtable) 虚拟滚动技术，轻松应对百万行数据，不卡顿。
+* **多线程筛选**：所有的字符串匹配与逻辑运算均在 **Web Worker** 中运行，主线程 UI 保持流畅响应。
+* **高级逻辑筛选**：支持 `&` (与)、`|` (或) 以及 `()` (括号) 的组合逻辑搜索。
+* **零服务器开销**：数据解析与处理完全在客户端完成，保护隐私且无需后端支持。
+* **极致交互**：支持单元格多选、Ctrl+C 复制、右键直接复制到剪贴板。
 
-## 📖 使用指南 (Usage)
+### ✨ 主要功能
 
-1.  下载本项目中的 `index.html` 文件。
-2.  直接使用浏览器（Chrome/Edge/Firefox）打开该文件。
-3.  将 Excel 文件拖入中间区域。
-4.  在顶部输入框输入筛选条件即可。
+* **拖拽上传**：支持 `.xlsx`, `.xls`, `.csv` 格式。
+* **高级搜索**：
+* **包含模式**：如输入 `北京 & (科技 | 互联网)` 筛选特定行业。
+* **排除模式**：过滤掉不需要的内容。
+* **智能状态栏**：实时显示当前筛选出的记录条数与总数。
+* **便捷复制**：
+* 选中单元格后按 `Ctrl + C`。
+* 右键点击选区直接一键复制，格式完美兼容 Excel。
+* **自动列宽**：根据内容自动调整表头宽度。
 
-## 📝 筛选语法说明 (Filter Syntax)
+### 🛠️ 技术栈
 
-筛选器支持强大的布尔逻辑组合。
+| 工具 | 用途 |
+| --- | --- |
+| **VTable** | 高性能虚拟表格组件，负责渲染与交互 |
+| **SheetJS (XLSX)** | Excel 文件解析 |
+| **Web Worker** | 异步处理大数据集的搜索与预处理 |
+| **Vanilla JS** | 纯原生 JavaScript 驱动，无框架依赖，轻量快速 |
 
-### 1. 包含 (Include)
-在“包含”输入框中输入：
+### 🚀 快速开始
 
-| 场景 | 语法示例 | 说明 |
-| :--- | :--- | :--- |
-| **单词匹配** | `Apple` | 筛选包含 "Apple" 的行 |
-| **同时包含 (AND)** | `Apple & Red` | 筛选同时包含 "Apple" **和** "Red" 的行 |
-| **任意包含 (OR)** | `Apple | Banana` | 筛选包含 "Apple" **或** "Banana" 的行 |
-| **混合逻辑** | `Apple & (Red | Green)` | 筛选包含 "Apple" 且同时包含 ("Red" 或 "Green") 的行 |
-| **复杂嵌套** | `(A | B) & (C | D)` | 支持多层括号嵌套 |
+1. **克隆或下载**本仓库。
+2. 直接在浏览器中打开 `index.html`（建议使用现代 Chrome, Edge 或 Firefox）。
+3. 将你的 Excel 文件拖入虚线框内。
+4. 在顶部输入框开始你的检索。
 
-### 2. 排除 (Exclude)
-在“排除”输入框中输入：
+### 💡 搜索语法示例
 
-*   输入 `Error`：排除所有包含 "Error" 的行。
-*   输入 `Test | Temp`：排除所有包含 "Test" **或** "Temp" 的行。
+筛选器支持简单的逻辑运算符：
 
-> **提示**: 筛选不区分大小写 (Case-insensitive)。
+* `A & B`：同时包含 A 和 B。
+* `A | B`：包含 A 或 B。
+* `A & (B | C)`：包含 A，且同时包含 B 或 C 其中之一。
+* **大小写不敏感**：自动将所有搜索转换为小写匹配。
 
-## 📦 技术栈 (Tech Stack)
-
-*   [**VisActor VTable**](https://visactor.io/vtable): 高性能多维表格渲染库。
-*   [**SheetJS (xlsx)**](https://sheetjs.com/): 强大的电子表格解析库。
-*   **Web Worker**: 浏览器原生多线程 API。
-*   **Blob URL**: 用于将 Worker 代码内联到 HTML 中，避免跨域问题。
-
-## 🤝 贡献 (Contributing)
-
-欢迎提交 Issue 或 Pull Request 来改进此工具！
-
-## 📄 开源协议 (License)
-
-[MIT License](LICENSE)
