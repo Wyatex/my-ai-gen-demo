@@ -1,471 +1,532 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VTable Excel 百万级数据筛选 (Web Worker 版)</title>
-    
-    <!-- SheetJS -->
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-    <!-- VTable -->
     <script src="https://unpkg.com/@visactor/vtable/dist/vtable.min.js"></script>
-
     <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            height: 100%;
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-        }
+      body,
+      html {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
 
-        /* 顶部控制栏 */
-        #toolbar {
-            height: 70px;
-            background: #f8f9fa;
-            border-bottom: 1px solid #e9ecef;
-            display: none;
-            align-items: center;
-            padding: 0 20px;
-            gap: 20px;
-            box-sizing: border-box;
-            flex-shrink: 0;
-        }
+      /* 顶部控制栏 */
+      #toolbar {
+        height: 70px;
+        background: #f8f9fa;
+        border-bottom: 1px solid #e9ecef;
+        display: none;
+        align-items: center;
+        padding: 0 20px;
+        gap: 20px;
+        box-sizing: border-box;
+        flex-shrink: 0;
+      }
 
-        .input-wrapper {
-            position: relative;
-            display: flex;
-            flex-direction: column;
-        }
+      .input-wrapper {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+      }
 
-        .input-wrapper label {
-            font-size: 12px;
-            color: #666;
-            margin-bottom: 4px;
-            font-weight: 600;
-        }
+      .input-wrapper label {
+        font-size: 12px;
+        color: #666;
+        margin-bottom: 4px;
+        font-weight: 600;
+      }
 
-        .input-wrapper input {
-            padding: 8px 12px;
-            border: 1px solid #ced4da;
-            border-radius: 6px;
-            width: 300px;
-            font-size: 14px;
-            transition: border-color 0.2s, box-shadow 0.2s;
-        }
+      .input-wrapper input {
+        padding: 8px 12px;
+        border: 1px solid #ced4da;
+        border-radius: 6px;
+        width: 300px;
+        font-size: 14px;
+        transition: border-color 0.2s, box-shadow 0.2s;
+      }
 
-        .input-wrapper input:focus {
-            outline: none;
-            border-color: #4dabf7;
-            box-shadow: 0 0 0 3px rgba(77, 171, 247, 0.2);
-        }
+      .input-wrapper input:focus {
+        outline: none;
+        border-color: #4dabf7;
+        box-shadow: 0 0 0 3px rgba(77, 171, 247, 0.2);
+      }
 
-        #loading-indicator {
-            display: none;
-            align-items: center;
-            color: #2d8cf0;
-            font-size: 14px;
-            font-weight: bold;
-        }
-        
-        /* 简单的加载动画 */
-        .spinner {
-            width: 16px;
-            height: 16px;
-            border: 2px solid #2d8cf0;
-            border-top: 2px solid transparent;
-            border-radius: 50%;
-            margin-right: 8px;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+      #loading-indicator {
+        display: none;
+        align-items: center;
+        color: #2d8cf0;
+        font-size: 14px;
+        font-weight: bold;
+      }
 
-        #btn-reset-file {
-            margin-left: auto;
-            background-color: #fa5252;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 500;
-            transition: background-color 0.2s;
+      /* 简单的加载动画 */
+      .spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid #2d8cf0;
+        border-top: 2px solid transparent;
+        border-radius: 50%;
+        margin-right: 8px;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
         }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
 
-        #btn-reset-file:hover {
-            background-color: #e03131;
-        }
+      #btn-reset-file {
+        margin-left: auto;
+        background-color: #fa5252;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: background-color 0.2s;
+      }
 
-        /* 拖拽区域 */
-        #drop-zone {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            border: 3px dashed #dee2e6;
-            margin: 20px;
-            border-radius: 12px;
-            background-color: #f8f9fa;
-            transition: all 0.3s;
-            color: #adb5bd;
-        }
+      #btn-reset-file:hover {
+        background-color: #e03131;
+      }
 
-        #drop-zone.active {
-            border-color: #4dabf7;
-            background-color: #e7f5ff;
-            color: #228be6;
-        }
+      /* 拖拽区域 */
+      #drop-zone {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        border: 3px dashed #dee2e6;
+        margin: 20px;
+        border-radius: 12px;
+        background-color: #f8f9fa;
+        transition: all 0.3s;
+        color: #adb5bd;
+      }
 
-        #drop-zone.hidden {
-            display: none;
-        }
+      #drop-zone.active {
+        border-color: #4dabf7;
+        background-color: #e7f5ff;
+        color: #228be6;
+      }
 
-        #drop-zone h2 {
-            margin: 0 0 10px 0;
-            color: inherit;
-        }
+      #drop-zone.hidden {
+        display: none;
+      }
 
-        /* 表格容器 */
-        #table-container {
-            flex: 1;
-            width: 100%;
-            display: none;
-            overflow: hidden;
-            position: relative;
-        }
+      #drop-zone h2 {
+        margin: 0 0 10px 0;
+        color: inherit;
+      }
 
-        /* 状态栏 */
-        #status-bar {
-            height: 30px;
-            background: #fff;
-            border-top: 1px solid #eee;
-            display: none;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 20px;
-            font-size: 12px;
-            color: #888;
-        }
-        
-        .hint {
-            color: #228be6;
-            font-weight: 600;
-        }
+      /* 表格容器 */
+      #table-container {
+        flex: 1;
+        width: 100%;
+        display: none;
+        overflow: hidden;
+        position: relative;
+      }
+
+      /* 状态栏 */
+      #status-bar {
+        height: 30px;
+        background: #fff;
+        border-top: 1px solid #eee;
+        display: none;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 20px;
+        font-size: 12px;
+        color: #888;
+      }
+
+      .hint {
+        color: #228be6;
+        font-weight: 600;
+      }
+
+      /* [新增] 复制成功提示样式 */
+      #toast {
+        visibility: hidden;
+        min-width: 200px;
+        background-color: #333;
+        color: #fff;
+        text-align: center;
+        border-radius: 4px;
+        padding: 12px;
+        position: fixed;
+        z-index: 1000;
+        left: 50%;
+        top: 30px;
+        transform: translateX(-50%);
+        font-size: 14px;
+        opacity: 0;
+        transition: opacity 0.3s, top 0.3s;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      }
+
+      #toast.show {
+        visibility: visible;
+        opacity: 1;
+        top: 50px;
+      }
+
+      #toast .icon {
+        margin-right: 8px;
+        color: #40c057;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
+    <div id="toast">
+      <span class="icon">✔</span><span id="toast-msg">复制成功</span>
+    </div>
 
     <div id="toolbar">
-        <div class="input-wrapper">
-            <label for="filter-include">包含 (支持 & | 括号)</label>
-            <input type="text" id="filter-include" placeholder="输入关键词，例如: A & (B | C)">
-        </div>
-
-        <div class="input-wrapper">
-            <label for="filter-exclude">排除 (支持 & | 括号)</label>
-            <input type="text" id="filter-exclude" placeholder="输入排除词">
-        </div>
-
-        <div id="loading-indicator">
-            <div class="spinner"></div>
-            <span id="loading-text">处理中...</span>
-        </div>
-
-        <button id="btn-reset-file" onclick="location.reload()">重新上传</button>
+      <div class="input-wrapper">
+        <label for="filter-include">包含 (支持 & | 括号)</label>
+        <input
+          type="text"
+          id="filter-include"
+          placeholder="输入关键词，例如: A & (B | C)"
+        />
+      </div>
+      <div class="input-wrapper">
+        <label for="filter-exclude">排除 (支持 & | 括号)</label>
+        <input type="text" id="filter-exclude" placeholder="输入排除词" />
+      </div>
+      <div id="loading-indicator">
+        <div class="spinner"></div>
+        <span id="loading-text">处理中...</span>
+      </div>
+      <button id="btn-reset-file" onclick="location.reload()">重新上传</button>
     </div>
 
     <div id="drop-zone">
-        <h2>拖拽 Excel 文件到这里</h2>
-        <p>支持 .xlsx, .xls, .csv (百万行数据测试优化版)</p>
+      <h2>拖拽 Excel 文件到这里</h2>
+      <p>支持 .xlsx, .xls, .csv (百万行数据测试优化版)</p>
     </div>
 
     <div id="table-container"></div>
-    
+
     <div id="status-bar">
-        <span id="record-count"></span>
-        <span class="hint">💡 支持框选内容，按 Ctrl+C 复制</span>
+      <span id="record-count"></span>
+      <span class="hint"
+        >💡 选中内容后按 Ctrl+C 或
+        <span style="color: #fa5252">右键</span> 复制</span
+      >
     </div>
 
-    <!-- 
-        =======================================================
-        Worker 脚本逻辑 (作为字符串嵌入，避免跨域或多文件问题)
-        =======================================================
-    -->
     <script id="worker-script" type="javascript/worker">
-        let originalData = [];
-        let searchCache = []; // 预处理后的纯文本数据，极大加速筛选
+      let originalData = [];
+      let searchCache = [];
 
-        // 递归逻辑判断函数 (独立在 Worker 内部)
-        function evaluateLogic(expression, rowText) {
-            if (!expression || expression.trim() === '') return true; 
+      function evaluateLogic(expression, rowText) {
+          if (!expression || expression.trim() === '') return true;
 
-            let expr = expression;
+          let expr = expression;
+          while (/\([^()]*\)/.test(expr)) {
+              expr = expr.replace(/\(([^()]*)\)/g, (match, content) => {
+                  return evaluateLogic(content, rowText) ? "TRUE" : "FALSE";
+              });
+          }
 
-            // 处理括号
-            while (/\([^()]*\)/.test(expr)) {
-                expr = expr.replace(/\(([^()]*)\)/g, (match, content) => {
-                    return evaluateLogic(content, rowText) ? "TRUE" : "FALSE";
-                });
-            }
+          const orParts = expr.split('|');
+          for (let part of orParts) {
+              const andParts = part.split('&');
+              const andResult = andParts.every(item => {
+                  item = item.trim();
+                  if (item === "TRUE") return true;
+                  if (item === "FALSE") return false;
+                  return rowText.includes(item.toLowerCase());
+              });
 
-            const orParts = expr.split('|');
-            for (let part of orParts) {
-                const andParts = part.split('&');
-                const andResult = andParts.every(item => {
-                    item = item.trim();
-                    if (item === "TRUE") return true;
-                    if (item === "FALSE") return false;
-                    // 使用缓存的 rowText (全小写) 进行比较
-                    return rowText.includes(item.toLowerCase());
-                });
+              if (andResult) return true;
+          }
+          return false;
+      }
 
-                if (andResult) return true;
-            }
-            return false;
-        }
+      self.onmessage = function(e) {
+          const { type, payload } = e.data;
 
-        self.onmessage = function(e) {
-            const { type, payload } = e.data;
+          if (type === 'INIT_DATA') {
+              originalData = payload;
+              searchCache = new Array(originalData.length);
+              for(let i = 0; i < originalData.length; i++) {
+                  searchCache[i] = Object.values(originalData[i]).join(" ").toLowerCase();
+              }
+              self.postMessage({
+                  type: 'INIT_COMPLETE',
+                  count: originalData.length,
+                  data: originalData
+              });
 
-            if (type === 'INIT_DATA') {
-                // 1. 接收原始数据
-                originalData = payload;
-                
-                // 2. 预处理：生成每行的搜索字符串缓存
-                // 这样筛选时就不需要每次都 Object.values().join() 了，性能提升巨大
-                searchCache = new Array(originalData.length);
-                for(let i = 0; i < originalData.length; i++) {
-                    // 将对象的值拼接成字符串，并转为小写
-                    searchCache[i] = Object.values(originalData[i]).join(" ").toLowerCase();
-                }
-
-                // 3. 通知主线程准备就绪，并返回全部数据用于初次渲染
-                self.postMessage({ 
-                    type: 'INIT_COMPLETE', 
-                    count: originalData.length,
-                    data: originalData // 初次渲染返回全部
-                });
-
-            } else if (type === 'FILTER') {
-                const { includeExpr, excludeExpr } = payload;
-                
-                // 如果没有筛选条件，直接返回全部
-                if (!includeExpr && !excludeExpr) {
-                    self.postMessage({ 
-                        type: 'FILTER_RESULT', 
-                        data: originalData 
-                    });
-                    return;
-                }
-
-                const result = [];
-                // 遍历缓存进行筛选
-                for (let i = 0; i < searchCache.length; i++) {
-                    const rowText = searchCache[i];
-                    
-                    const isIncluded = evaluateLogic(includeExpr, rowText);
-                    let isExcluded = false;
-                    if (excludeExpr) {
-                        isExcluded = evaluateLogic(excludeExpr, rowText);
-                    }
-
-                    if (isIncluded && !isExcluded) {
-                        result.push(originalData[i]);
-                    }
-                }
-
-                self.postMessage({ 
-                    type: 'FILTER_RESULT', 
-                    data: result 
-                });
-            }
-        };
+          } else if (type === 'FILTER') {
+              const { includeExpr, excludeExpr } = payload;
+              if (!includeExpr && !excludeExpr) {
+                  self.postMessage({ type: 'FILTER_RESULT', data: originalData });
+                  return;
+              }
+              const result = [];
+              for (let i = 0; i < searchCache.length; i++) {
+                  const rowText = searchCache[i];
+                  const isIncluded = evaluateLogic(includeExpr, rowText);
+                  let isExcluded = false;
+                  if (excludeExpr) isExcluded = evaluateLogic(excludeExpr, rowText);
+                  if (isIncluded && !isExcluded) result.push(originalData[i]);
+              }
+              self.postMessage({ type: 'FILTER_RESULT', data: result });
+          }
+      };
     </script>
 
     <script>
-        const dropZone = document.getElementById('drop-zone');
-        const toolbar = document.getElementById('toolbar');
-        const tableContainer = document.getElementById('table-container');
-        const statusBar = document.getElementById('status-bar');
-        const recordCount = document.getElementById('record-count');
-        const inputInclude = document.getElementById('filter-include');
-        const inputExclude = document.getElementById('filter-exclude');
-        const loadingIndicator = document.getElementById('loading-indicator');
-        const loadingText = document.getElementById('loading-text');
+      const dropZone = document.getElementById("drop-zone");
+      const toolbar = document.getElementById("toolbar");
+      const tableContainer = document.getElementById("table-container");
+      const statusBar = document.getElementById("status-bar");
+      const recordCount = document.getElementById("record-count");
+      const inputInclude = document.getElementById("filter-include");
+      const inputExclude = document.getElementById("filter-exclude");
+      const loadingIndicator = document.getElementById("loading-indicator");
+      const loadingText = document.getElementById("loading-text");
 
-        let vTableInstance = null;
-        let totalCount = 0;
-        let worker = null;
+      // [新增] Toast 元素
+      const toast = document.getElementById("toast");
+      const toastMsg = document.getElementById("toast-msg");
 
-        // --- 初始化 Worker ---
-        function initWorker() {
-            const blob = new Blob([document.getElementById('worker-script').textContent], { type: "text/javascript" });
-            worker = new Worker(window.URL.createObjectURL(blob));
+      let vTableInstance = null;
+      let totalCount = 0;
+      let worker = null;
 
-            worker.onmessage = function(e) {
-                const { type, data, count } = e.data;
+      // --- [新增] 显示 Toast 函数 ---
+      function showToast(message = "复制成功") {
+        toastMsg.textContent = message;
+        toast.className = "show";
+        // 3秒后消失
+        setTimeout(() => {
+          toast.className = toast.className.replace("show", "");
+        }, 3000);
+      }
 
-                if (type === 'INIT_COMPLETE') {
-                    loadingIndicator.style.display = 'none';
-                    totalCount = count;
-                    renderVTable(data); // 初次渲染
-                    updateStatus(data.length);
-                } else if (type === 'FILTER_RESULT') {
-                    loadingIndicator.style.display = 'none';
-                    // 只更新数据，不重新创建表格
-                    if (vTableInstance) {
-                        vTableInstance.setRecords(data);
-                    }
-                    updateStatus(data.length);
-                }
-            };
-        }
+      // --- 初始化 Worker ---
+      function initWorker() {
+        const blob = new Blob(
+          [document.getElementById("worker-script").textContent],
+          { type: "text/javascript" }
+        );
+        worker = new Worker(window.URL.createObjectURL(blob));
 
-        initWorker();
+        worker.onmessage = function (e) {
+          const { type, data, count } = e.data;
 
-        // --- 防抖函数 ---
-        function debounce(func, wait) {
-            let timeout;
-            return function(...args) {
-                const context = this;
-                clearTimeout(timeout);
-                timeout = setTimeout(() => {
-                    func.apply(context, args);
-                }, wait);
-            };
-        }
+          if (type === "INIT_COMPLETE") {
+            loadingIndicator.style.display = "none";
+            totalCount = count;
+            renderVTable(data);
+            updateStatus(data.length);
+          } else if (type === "FILTER_RESULT") {
+            loadingIndicator.style.display = "none";
+            if (vTableInstance) {
+              vTableInstance.setRecords(data);
+            }
+            updateStatus(data.length);
+          }
+        };
+      }
 
-        // --- 触发筛选 ---
-        function triggerFilter() {
-            const includeExpr = inputInclude.value.trim();
-            const excludeExpr = inputExclude.value.trim();
+      initWorker();
 
-            loadingText.textContent = "筛选中...";
-            loadingIndicator.style.display = 'flex';
+      // --- 防抖函数 ---
+      function debounce(func, wait) {
+        let timeout;
+        return function (...args) {
+          const context = this;
+          clearTimeout(timeout);
+          timeout = setTimeout(() => {
+            func.apply(context, args);
+          }, wait);
+        };
+      }
 
-            // 发送给 Worker
-            worker.postMessage({
-                type: 'FILTER',
-                payload: { includeExpr, excludeExpr }
-            });
-        }
+      // --- 触发筛选 ---
+      function triggerFilter() {
+        const includeExpr = inputInclude.value.trim();
+        const excludeExpr = inputExclude.value.trim();
 
-        const debouncedFilter = debounce(triggerFilter, 300);
+        loadingText.textContent = "筛选中...";
+        loadingIndicator.style.display = "flex";
 
-        inputInclude.addEventListener('input', debouncedFilter);
-        inputExclude.addEventListener('input', debouncedFilter);
+        worker.postMessage({
+          type: "FILTER",
+          payload: { includeExpr, excludeExpr },
+        });
+      }
 
-        // --- 文件拖拽处理 ---
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            dropZone.addEventListener(eventName, e => {
-                e.preventDefault();
-                e.stopPropagation();
-            }, false);
+      const debouncedFilter = debounce(triggerFilter, 300);
+
+      inputInclude.addEventListener("input", debouncedFilter);
+      inputExclude.addEventListener("input", debouncedFilter);
+
+      // --- 文件拖拽处理 ---
+      ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
+        dropZone.addEventListener(
+          eventName,
+          (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          },
+          false
+        );
+      });
+
+      dropZone.addEventListener("dragenter", () =>
+        dropZone.classList.add("active")
+      );
+      dropZone.addEventListener("dragover", () =>
+        dropZone.classList.add("active")
+      );
+      dropZone.addEventListener("dragleave", () =>
+        dropZone.classList.remove("active")
+      );
+      dropZone.addEventListener("drop", (e) => {
+        dropZone.classList.remove("active");
+        const files = e.dataTransfer.files;
+        if (files.length > 0) handleFile(files[0]);
+      });
+
+      function handleFile(file) {
+        loadingText.textContent = "读取与预处理数据...";
+        loadingIndicator.style.display = "flex";
+        dropZone.classList.add("hidden");
+        toolbar.style.display = "flex";
+
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          const data = new Uint8Array(e.target.result);
+          setTimeout(() => {
+            try {
+              const workbook = XLSX.read(data, { type: "array" });
+              const firstSheetName = workbook.SheetNames[0];
+              const worksheet = workbook.Sheets[firstSheetName];
+              const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+                defval: "",
+              });
+
+              if (jsonData.length === 0) {
+                alert("空文件");
+                loadingIndicator.style.display = "none";
+                return;
+              }
+
+              worker.postMessage({
+                type: "INIT_DATA",
+                payload: jsonData,
+              });
+            } catch (error) {
+              console.error(error);
+              alert("解析失败，请检查文件格式");
+              loadingIndicator.style.display = "none";
+            }
+          }, 100);
+        };
+        reader.readAsArrayBuffer(file);
+      }
+
+      function updateStatus(currentCount) {
+        recordCount.textContent = `显示 ${currentCount} 条记录 / 总计 ${totalCount} 条`;
+      }
+
+      // --- 渲染表格 (包含复制功能) ---
+      function renderVTable(data) {
+        tableContainer.style.display = "block";
+        statusBar.style.display = "flex";
+
+        if (vTableInstance) vTableInstance.release();
+
+        const headers = Object.keys(data[0]);
+        const columns = headers.map((key) => ({
+          field: key,
+          title: key,
+          width: "auto",
+          minWidth: 100,
+          sort: true,
+        }));
+
+        const option = {
+          container: tableContainer,
+          records: data,
+          columns: columns,
+          autoWrapText: true,
+          limitTitleField: true,
+          defaultRowHeight: 40,
+          defaultHeaderRowHeight: 50,
+          widthMode: "standard",
+
+          keyboardOptions: {
+            copySelected: true, // 启用 Ctrl+C
+            selectAllOnCtrlA: true,
+            pasteValueToCell: false,
+          },
+          excelOptions: {
+            fillHandle: false,
+          },
+          interaction: {
+            selection: {
+              type: "multiple",
+              mode: "cell",
+            },
+          },
+        };
+
+        vTableInstance = new VTable.ListTable(option);
+
+        const { CONTEXTMENU_CELL, COPY_DATA } = VTable.ListTable.EVENT_TYPE;
+
+        // --- [新增] 监听 Ctrl+C 复制事件 ---
+        vTableInstance.on(COPY_DATA, () => {
+          showToast("复制成功 (Ctrl+C)");
         });
 
-        dropZone.addEventListener('dragenter', () => dropZone.classList.add('active'));
-        dropZone.addEventListener('dragover', () => dropZone.classList.add('active'));
-        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('active'));
-        dropZone.addEventListener('drop', (e) => {
-            dropZone.classList.remove('active');
-            const files = e.dataTransfer.files;
-            if (files.length > 0) handleFile(files[0]);
+        // --- [新增] 监听右键菜单事件，实现直接复制 ---
+        vTableInstance.on(CONTEXTMENU_CELL, (args) => {
+          // 阻止浏览器默认的右键菜单
+          args.event.preventDefault();
+
+          // 获取 VTable 准备好的复制内容 (包含制表符等格式，适配 Excel)
+          const copyData = vTableInstance.getCopyValue();
+
+          if (copyData) {
+            // 使用现代剪贴板 API
+            navigator.clipboard
+              .writeText(copyData)
+              .then(() => {
+                showToast("已复制到剪贴板 (右键)");
+              })
+              .catch((err) => {
+                console.error("无法复制: ", err);
+                showToast("复制失败，请重试");
+              });
+          } else {
+            // 如果没选中内容，提示一下
+            showToast("请先选择单元格");
+          }
         });
-
-        function handleFile(file) {
-            loadingText.textContent = "读取与预处理数据...";
-            loadingIndicator.style.display = 'flex';
-            dropZone.classList.add('hidden'); // 立即隐藏拖拽区，避免困惑
-            toolbar.style.display = 'flex';   // 显示工具栏
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const data = new Uint8Array(e.target.result);
-                
-                // 使用 setTimeout 让出主线程，确保 loading 动画能渲染出来
-                setTimeout(() => {
-                    try {
-                        const workbook = XLSX.read(data, { type: 'array' });
-                        const firstSheetName = workbook.SheetNames[0];
-                        const worksheet = workbook.Sheets[firstSheetName];
-                        const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-
-                        if (jsonData.length === 0) {
-                            alert("空文件");
-                            loadingIndicator.style.display = 'none';
-                            return;
-                        }
-
-                        // 将数据发送给 Worker 进行预处理
-                        worker.postMessage({
-                            type: 'INIT_DATA',
-                            payload: jsonData
-                        });
-
-                    } catch (error) {
-                        console.error(error);
-                        alert("解析失败，请检查文件格式");
-                        loadingIndicator.style.display = 'none';
-                    }
-                }, 100);
-            };
-            reader.readAsArrayBuffer(file);
-        }
-
-        function updateStatus(currentCount) {
-            recordCount.textContent = `显示 ${currentCount} 条记录 / 总计 ${totalCount} 条`;
-        }
-
-        function renderVTable(data) {
-            tableContainer.style.display = 'block';
-            statusBar.style.display = 'flex';
-
-            if (vTableInstance) vTableInstance.release();
-
-            const headers = Object.keys(data[0]);
-            
-            const columns = headers.map(key => ({
-                field: key,
-                title: key,
-                width: 'auto',
-                minWidth: 100, 
-                sort: true
-            }));
-
-            const option = {
-                container: tableContainer,
-                records: data,
-                columns: columns,
-                autoWrapText: true,
-                limitTitleField: true,
-                defaultRowHeight: 40,
-                defaultHeaderRowHeight: 50,
-                widthMode: 'standard', // 提升性能
-                
-                // 性能优化配置：虚拟滚动
-                // VTable 默认开启虚拟滚动，但在大数据量下确保开启很重要
-                
-                keyboardOptions: {
-                    copySelected: true,
-                    selectAllOnCtrlA: true,
-                    pasteValueToCell: false
-                },
-                excelOptions: {
-                    fillHandle: false,
-                },
-                interaction: {
-                    selection: {
-                        type: 'multiple',
-                        mode: 'cell'
-                    }
-                }
-            };
-
-            vTableInstance = new VTable.ListTable(option);
-        }
+      }
     </script>
-</body>
+  </body>
 </html>
