@@ -3,12 +3,6 @@
 
 ---
 
-这份代码实现了一个非常实用的功能：**高性能 Web Excel 查看与检索工具**。它结合了 VisActor VTable 的高性能渲染和 Web Worker 的多线程处理能力。
-
-以下是为你准备的 GitHub `README.md` 模板，采用了专业且易读的排版：
-
----
-
 ## 🚀 [VTable Excel Million-Level Data Filter](./excel-display.html)
 
 **一个基于 Web Worker 和 VTable 构建的高性能百万级 Excel 数据实时筛选查看器。**
