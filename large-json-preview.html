@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>超大 JSON 可视化 (虚拟列表版)</title>
+    <style>
+        :root {
+            --bg-color: #1e1e1e;
+            --text-color: #d4d4d4;
+            --key-color: #9cdcfe;
+            --string-color: #ce9178;
+            --number-color: #b5cea8;
+            --boolean-color: #569cd6;
+            --null-color: #c586c0;
+            --hover-bg: #2a2d2e;
+            --border-color: #444;
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: Consolas, "Courier New", monospace;
+            height: 100vh;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        input[type="file"] {
+            color: white;
+        }
+
+        #loading {
+            color: #ffcc00;
+            font-weight: bold;
+            display: none;
+        }
+
+        /* 虚拟列表容器 */
+        #viewport {
+            flex: 1;
+            overflow-y: auto;
+            position: relative;
+            border: 1px solid var(--border-color);
+            background: #1e1e1e;
+            border-radius: 4px;
+        }
+
+        /* 撑开滚动条的高度占位层 */
+        #spacer {
+            width: 1px;
+        }
+
+        /* 实际渲染 DOM 的层 */
+        #content {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+        }
+
+        /* 单行节点样式 */
+        .tree-row {
+            height: 24px;
+            line-height: 24px;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            white-space: nowrap;
+            user-select: none;
+        }
+
+        .tree-row:hover {
+            background-color: var(--hover-bg);
+        }
+
+        .toggle-icon {
+            display: inline-block;
+            width: 20px;
+            text-align: center;
+            color: #888;
+            font-size: 12px;
+            transition: transform 0.1s;
+        }
+
+        .toggle-icon.expanded {
+            transform: rotate(90deg);
+        }
+
+        .toggle-icon.empty {
+            cursor: default;
+            visibility: hidden;
+        }
+
+        /* 语法高亮 */
+        .json-key { color: var(--key-color); }
+        .json-string { color: var(--string-color); }
+        .json-number { color: var(--number-color); }
+        .json-boolean { color: var(--boolean-color); }
+        .json-null { color: var(--null-color); }
+        .json-summary { color: #888; font-style: italic; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <input type="file" id="fileInput" accept=".json" />
+        <div id="loading">正在读取和解析庞大的 JSON 数据，请稍候...</div>
+    </div>
+
+    <div id="viewport">
+        <div id="spacer"></div>
+        <div id="content"></div>
+    </div>
+
+<script>
+    // --- 配置与状态 ---
+    const ROW_HEIGHT = 24;      // 每行的高度
+    const BUFFER_SIZE = 10;     // 上下缓冲渲染行数
+    
+    let visibleList = [];       // 当前展开的扁平化节点列表
+    let viewportHeight = 0;     // 视口高度
+
+    // DOM 元素
+    const viewport = document.getElementById('viewport');
+    const spacer = document.getElementById('spacer');
+    const content = document.getElementById('content');
+    const fileInput = document.getElementById('fileInput');
+    const loading = document.getElementById('loading');
+
+    // --- 工具函数 ---
+    function escapeHtml(str) {
+        return String(str)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    function getType(val) {
+        if (val === null) return 'null';
+        if (Array.isArray(val)) return 'array';
+        return typeof val;
+    }
+
+    // --- 核心逻辑：生成子节点 ---
+    // 按需生成子节点，避免一次性递归整个 50MB JSON
+    function generateChildren(data, depth) {
+        const children = [];
+        const isArray = Array.isArray(data);
+        
+        for (const key in data) {
+            if (Object.prototype.hasOwnProperty.call(data, key)) {
+                const val = data[key];
+                const type = getType(val);
+                const hasChildren = (type === 'object' || type === 'array') && Object.keys(val).length > 0;
+                
+                let summary = '';
+                if (type === 'object') summary = `{ Object, ${Object.keys(val).length} keys }`;
+                else if (type === 'array') summary = `[ Array, ${val.length} items ]`;
+
+                children.push({
+                    key: isArray ? null : key, // 数组不显示 key
+                    value: val,
+                    type: type,
+                    depth: depth,
+                    isExpanded: false,
+                    hasChildren: hasChildren,
+                    summary: summary
+                });
+            }
+        }
+        return children;
+    }
+
+    // --- 交互：展开/折叠节点 ---
+    function toggleNode(index) {
+        const node = visibleList[index];
+        if (!node.hasChildren) return;
+
+        if (node.isExpanded) {
+            // 折叠：查找并移除所有子孙节点
+            node.isExpanded = false;
+            let removeCount = 0;
+            for (let i = index + 1; i < visibleList.length; i++) {
+                if (visibleList[i].depth > node.depth) {
+                    removeCount++;
+                } else {
+                    break;
+                }
+            }
+            visibleList.splice(index + 1, removeCount);
+        } else {
+            // 展开：仅生成下一层级节点并插入
+            node.isExpanded = true;
+            const children = generateChildren(node.value, node.depth + 1);
+            visibleList.splice(index + 1, 0, ...children);
+        }
+        
+        updateScroll();
+    }
+
+    // --- 渲染：虚拟列表核心 ---
+    function updateScroll() {
+        const scrollTop = viewport.scrollTop;
+        viewportHeight = viewport.clientHeight || 800;
+        
+        // 动态设置占位高度，撑开滚动条
+        spacer.style.height = `${visibleList.length * ROW_HEIGHT}px`;
+
+        // 计算当前可视范围的索引
+        let startIndex = Math.floor(scrollTop / ROW_HEIGHT) - BUFFER_SIZE;
+        let endIndex = Math.floor((scrollTop + viewportHeight) / ROW_HEIGHT) + BUFFER_SIZE;
+        
+        // 边界限制
+        startIndex = Math.max(0, startIndex);
+        endIndex = Math.min(visibleList.length, endIndex);
+
+        // 保持内容层跟随滚动位置
+        content.style.transform = `translateY(${startIndex * ROW_HEIGHT}px)`;
+
+        // 拼接可见区域的 HTML
+        let html = '';
+        for (let i = startIndex; i < endIndex; i++) {
+            const node = visibleList[i];
+            const paddingLeft = node.depth * 24;
+            
+            // 箭头图标
+            let iconClass = 'toggle-icon';
+            let iconText = '▶';
+            if (!node.hasChildren) {
+                iconClass += ' empty';
+                iconText = '';
+            } else if (node.isExpanded) {
+                iconClass += ' expanded';
+            }
+
+            // Key 的渲染
+            let keyHtml = node.key !== null ? `<span class="json-key">"${escapeHtml(node.key)}"</span>: ` : '';
+
+            // Value 的渲染
+            let valueHtml = '';
+            if (node.type === 'object' || node.type === 'array') {
+                valueHtml = `<span class="json-summary">${node.summary}</span>`;
+            } else if (node.type === 'string') {
+                valueHtml = `<span class="json-string">"${escapeHtml(node.value)}"</span>`;
+            } else if (node.type === 'number') {
+                valueHtml = `<span class="json-number">${node.value}</span>`;
+            } else if (node.type === 'boolean') {
+                valueHtml = `<span class="json-boolean">${node.value}</span>`;
+            } else if (node.type === 'null') {
+                valueHtml = `<span class="json-null">null</span>`;
+            }
+
+            html += `
+                <div class="tree-row" data-index="${i}" style="padding-left: ${paddingLeft}px;">
+                    <span class="${iconClass}">${iconText}</span>
+                    ${keyHtml}
+                    ${valueHtml}
+                </div>
+            `;
+        }
+        
+        content.innerHTML = html;
+    }
+
+    // --- 事件监听 ---
+
+    // 监听滚动事件，触发重新渲染可视区
+    viewport.addEventListener('scroll', () => {
+        // 使用 requestAnimationFrame 优化滚动帧率
+        window.requestAnimationFrame(updateScroll);
+    });
+
+    // 监听窗口大小改变
+    window.addEventListener('resize', () => {
+        updateScroll();
+    });
+
+    // 事件代理：监听节点的点击
+    content.addEventListener('click', (e) => {
+        const row = e.target.closest('.tree-row');
+        if (row) {
+            const index = parseInt(row.getAttribute('data-index'), 10);
+            toggleNode(index);
+        }
+    });
+
+    // 处理文件上传
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        loading.style.display = 'block';
+        content.innerHTML = '';
+        spacer.style.height = '0px';
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            // 给浏览器留出渲染 "Loading" 字样的时间
+            setTimeout(() => {
+                try {
+                    const jsonString = event.target.result;
+                    const parsedData = JSON.parse(jsonString);
+                    
+                    // 初始化根节点
+                    const rootType = getType(parsedData);
+                    let summary = rootType === 'object' ? `{ Object, ${Object.keys(parsedData).length} keys }` : `[ Array, ${parsedData.length} items ]`;
+                    
+                    visibleList = [{
+                        key: 'JSON Root',
+                        value: parsedData,
+                        type: rootType,
+                        depth: 0,
+                        isExpanded: true,
+                        hasChildren: true,
+                        summary: summary
+                    }];
+
+                    // 默认展开第一层
+                    const children = generateChildren(parsedData, 1);
+                    visibleList.push(...children);
+
+                    updateScroll();
+                } catch (error) {
+                    alert('JSON 解析失败：不是有效的 JSON 文件。\n\n' + error.message);
+                } finally {
+                    loading.style.display = 'none';
+                }
+            }, 50);
+        };
+        
+        // 使用 text 方式读取，50MB 文件通常在零点几秒内读取完毕
+        reader.readAsText(file);
+    });
+</script>
+</body>
+</html>
