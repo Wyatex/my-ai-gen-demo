@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Qwen3.5-ONNX WebGPU Chat</title>
+
+    <!-- 引入 Markdown-it 和 Highlight.js 以支持代码高亮 -->
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css"
+    />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
     <style>
       :root {
         --primary: #2563eb;
@@ -179,6 +188,58 @@
         margin-top: 8px;
         font-family:
           ui-monospace, SFMono-Regular, Consolas, 'Courier New', monospace;
+      }
+
+      /* =========================================
+         Markdown & 代码高亮样式
+      ========================================== */
+      .markdown-body {
+        font-size: 15px;
+        line-height: 1.6;
+      }
+      .markdown-body p {
+        margin-bottom: 8px;
+      }
+      .markdown-body p:last-child {
+        margin-bottom: 0;
+      }
+      .markdown-body pre {
+        background: #1f2937;
+        color: #f8f8f2;
+        padding: 12px;
+        border-radius: 6px;
+        overflow-x: auto;
+        margin: 10px 0;
+      }
+      .markdown-body code {
+        font-family: ui-monospace, SFMono-Regular, Consolas, Monaco, monospace;
+        font-size: 14px;
+        background: #e5e7eb;
+        padding: 2px 4px;
+        border-radius: 4px;
+      }
+      /* 用户消息里的代码底色适配深底色 */
+      .user-msg .markdown-body code {
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+      }
+      .markdown-body pre code {
+        background: transparent;
+        padding: 0;
+        border-radius: 0;
+        color: inherit;
+      }
+      .markdown-body ul,
+      .markdown-body ol {
+        margin-left: 24px;
+        margin-bottom: 8px;
+      }
+      .markdown-body a {
+        color: #2563eb;
+        text-decoration: none;
+      }
+      .markdown-body a:hover {
+        text-decoration: underline;
       }
 
       /* Input Area */
@@ -386,6 +447,21 @@
         TextStreamer,
       } from 'https://unpkg.com/@huggingface/transformers@4.0.0-next.8/dist/transformers.min.js'
 
+      // ============== 初始化 Markdown-it ==================
+      const md = window.markdownit({
+        html: true,
+        linkify: true,
+        breaks: true,
+        highlight: function (str, lang) {
+          if (lang && window.hljs && hljs.getLanguage(lang)) {
+            try {
+              return hljs.highlight(str, { language: lang }).value
+            } catch (__) {}
+          }
+          return '' // 使用默认转义
+        },
+      })
+
       // ============== 自定义 Streamer 以实时更新 UI 并计算速度 ==============
       class DOMTextStreamer extends TextStreamer {
         constructor(tokenizer, callback) {
@@ -552,9 +628,13 @@
         chatHistory = chat.messages || []
         chatContainerEl.innerHTML = ''
 
-        // 重新加载历史时也要显示之前记录的速度
+        // 重新加载历史时也要显示之前记录的速度，并进行 Markdown 解析
         chatHistory.forEach((msg) => {
-          const { statsDiv } = appendMessageUI(msg.role, msg.text, msg.image)
+          const { contentDiv, statsDiv } = appendMessageUI(
+            msg.role,
+            msg.text,
+            msg.image,
+          )
           if (msg.tps && statsDiv) {
             statsDiv.innerText = `⚡ 速度: ${msg.tps} tokens/s`
           }
@@ -655,8 +735,7 @@
         }
       }
 
-      // ============== 消息 UI 处理 ==============
-      // 修改为返回对象包含 textSpan 和 statsDiv，方便外部实时更新
+      // ============== 消息 UI 处理 (引入 Markdown) ==============
       function appendMessageUI(role, text, imageBase64 = null, msgId = null) {
         const msgDiv = document.createElement('div')
         msgDiv.className = `message ${role === 'user' ? 'user-msg' : 'ai-msg'}`
@@ -668,9 +747,17 @@
           msgDiv.appendChild(img)
         }
 
-        const textSpan = document.createElement('span')
-        textSpan.innerText = text
-        msgDiv.appendChild(textSpan)
+        const contentDiv = document.createElement('div')
+        contentDiv.className = 'markdown-body'
+
+        // 用户消息使用普通纯文本显示，防止注入。AI 消息使用 Markdown 解析
+        if (role === 'user') {
+          contentDiv.innerText = text
+        } else {
+          contentDiv.innerHTML = md.render(text || '')
+        }
+
+        msgDiv.appendChild(contentDiv)
 
         // 如果是 AI 回复，添加一个显示速度的专属容器
         let statsDiv = null
@@ -683,7 +770,7 @@
         chatContainerEl.appendChild(msgDiv)
         chatContainerEl.scrollTop = chatContainerEl.scrollHeight
 
-        return { textSpan, statsDiv }
+        return { contentDiv, statsDiv }
       }
 
       // ============== 发送消息与模型推理 ==============
@@ -716,7 +803,7 @@
 
           // 准备 AI 消息框
           const aiMsgId = `ai-msg-${Date.now()}`
-          const { textSpan: aiTextSpan, statsDiv: aiStatsDiv } =
+          const { contentDiv: aiContentDiv, statsDiv: aiStatsDiv } =
             appendMessageUI('assistant', '思考中...', null, aiMsgId)
 
           try {
@@ -758,13 +845,14 @@
               inputs = await processor(promptText)
             }
 
-            // 3. 构建 Streamer 来动态更新网页及显示速度
-            aiTextSpan.innerText = ''
+            // 3. 构建 Streamer 来动态更新网页及显示速度 (应用 Markdown 渲染)
+            aiContentDiv.innerHTML = ''
 
             const streamer = new DOMTextStreamer(
               processor.tokenizer,
               (newText, isEnd, tps) => {
-                aiTextSpan.innerText = newText
+                // 实时渲染 Markdown 内容
+                aiContentDiv.innerHTML = md.render(newText)
                 if (tps > 0) {
                   aiStatsDiv.innerText = `⚡ 速度: ${tps} tokens/s`
                 }
@@ -779,16 +867,16 @@
               streamer: streamer,
             })
 
-            // 5. 保存结果（把速度也保存进去，方便重新加载时查看）
+            // 5. 保存结果（务必保存原始 Markdown 文本，而不是 HTML）
             chatHistory.push({
               role: 'assistant',
-              text: aiTextSpan.innerText,
+              text: streamer.generatedText,
               tps: streamer.finalTps,
             })
             updateDB()
           } catch (err) {
             console.error('生成报错: ', err)
-            aiTextSpan.innerText = '生成出错: ' + err.message
+            aiContentDiv.innerText = '生成出错: ' + err.message
           } finally {
             sendBtn.disabled = false
             textInput.disabled = false
