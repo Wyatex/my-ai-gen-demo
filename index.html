@@ -46,6 +46,9 @@
         font-size: 2.5rem;
         font-weight: 800;
         margin-bottom: 1rem;
+      }
+
+      header h1 .colorful {
         background: linear-gradient(to right, #4f46e5, #ec4899);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
@@ -226,7 +229,7 @@
   </head>
   <body>
     <header>
-      <h1>🚀 AI Gen Demo Tools</h1>
+      <h1>🚀 <span class="colorful">AI Gen Demo Tools</span></h1>
       <p>
         探索由纯前端技术打造的高性能数据处理与可视化工具，体验无后端、零延迟的数据交互。
       </p>
@@ -287,7 +290,6 @@
         >
       </article>
 
-      <!-- 项目 3: Parquet 预览 -->
       <article class="card">
         <div class="icon">🤖</div>
         <h2>Qwen3.5 WebGPU本地对话</h2>
@@ -303,6 +305,19 @@
           <span class="tag">Qwen3.5</span>
         </div>
         <a href="./qwen-webgpu-chat.html" class="btn" target="_blank"
+          >在线体验 Demo</a
+        >
+      </article>
+
+      <article class="card">
+        <div class="icon">✍</div>
+        <h2>OpenAI Stream 优雅解析器</h2>
+        <p>接口调用返回流式的数据不好看？来用这个工具可视化展示一下吧！</p>
+        <div class="tags">
+          <span class="tag">OpenAI</span>
+          <span class="tag">Markdown-it</span>
+        </div>
+        <a href="./openai-stream-parse.html" class="btn" target="_blank"
           >在线体验 Demo</a
         >
       </article>

@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenAI Stream 优雅解析器</title>
+
+    <!-- 引入 Tailwind CSS (包含 Typography 插件用于优雅渲染 Markdown) -->
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+
+    <!-- 引入 Markdown-it -->
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.1/dist/markdown-it.min.js"></script>
+
+    <!-- 引入 Highlight.js 用于代码块高亮 -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/highlight.js@11.8.0/styles/github.min.css"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.8.0/lib/highlight.min.js"></script>
+
+    <style>
+      /* 自定义滚动条样式，让界面更精致 */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+      }
+
+      /* 隐藏 details 默认的小三角，改用自定义箭头 */
+      details > summary {
+        list-style: none;
+      }
+      details > summary::-webkit-details-marker {
+        display: none;
+      }
+      details[open] summary svg.arrow {
+        transform: rotate(90deg);
+      }
+    </style>
+  </head>
+  <body class="bg-gray-100 h-screen flex flex-col font-sans overflow-hidden">
+    <!-- 顶部导航栏 -->
+    <header
+      class="bg-white shadow-sm border-b border-gray-200 px-6 py-4 flex justify-between items-center z-10"
+    >
+      <div class="flex items-center gap-2">
+        <svg
+          class="w-6 h-6 text-indigo-600"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M13 10V3L4 14h7v7l9-11h-7z"
+          ></path>
+        </svg>
+        <h1 class="text-xl font-bold text-gray-800">Stream 优雅解析器</h1>
+      </div>
+      <div class="flex gap-3">
+        <button
+          id="btn-parse"
+          class="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
+        >
+          ⚡ 一键瞬间解析
+        </button>
+        <button
+          id="btn-play"
+          class="px-4 py-2 bg-indigo-600 rounded-lg text-sm font-medium text-white hover:bg-indigo-700 transition-colors shadow-sm flex items-center gap-1"
+        >
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+            <path
+              fill-rule="evenodd"
+              d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
+              clip-rule="evenodd"
+            ></path>
+          </svg>
+          ▶ 模拟流式播放
+        </button>
+      </div>
+    </header>
+
+    <!-- 主体左右分栏 -->
+    <main class="flex-1 flex overflow-hidden">
+      <!-- 左侧：输入区 -->
+      <div class="w-1/2 flex flex-col border-r border-gray-200 bg-gray-50 p-4">
+        <label class="block text-sm font-semibold text-gray-600 mb-2"
+          >RAW SSE Stream 数据 (请放入以 data: 开头的数据)</label
+        >
+        <textarea
+          id="raw-input"
+          class="flex-1 w-full p-4 rounded-xl border border-gray-300 shadow-inner font-mono text-sm text-gray-800 bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none"
+          spellcheck="false"
+        ></textarea>
+      </div>
+
+      <!-- 右侧：展示区 -->
+      <div
+        class="w-1/2 flex flex-col bg-white p-6 overflow-y-auto"
+        id="output-scroll-container"
+      >
+        <div class="max-w-3xl mx-auto w-full">
+          <!-- 思考过程区域 (默认隐藏，有数据时展示) -->
+          <details
+            id="reasoning-box"
+            class="hidden mb-6 border border-gray-200 rounded-xl bg-gray-50 overflow-hidden shadow-sm"
+            open
+          >
+            <summary
+              class="cursor-pointer font-medium text-gray-600 hover:bg-gray-100 transition-colors p-3 select-none flex items-center text-sm"
+            >
+              <svg
+                class="arrow w-4 h-4 mr-2 text-gray-400 transition-transform duration-200"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M9 5l7 7-7 7"
+                ></path>
+              </svg>
+              <svg
+                class="w-4 h-4 mr-1.5 text-indigo-500"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                ></path>
+              </svg>
+              <span>深度思考过程</span>
+            </summary>
+            <div class="p-4 bg-white/50 border-t border-gray-200">
+              <div
+                id="reasoning-content"
+                class="prose prose-sm prose-gray max-w-none text-gray-500 italic"
+              >
+                <!-- 思考内容渲染区 -->
+              </div>
+            </div>
+          </details>
+
+          <!-- 正文渲染区域 -->
+          <div id="main-content" class="prose prose-indigo max-w-none">
+            <!-- Markdown 正文渲染区 -->
+            <div class="text-gray-400 italic mt-10 text-center">
+              左侧输入数据，点击上方按钮开始解析...
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      // 初始化 Markdown-it (支持代码高亮)
+      const md = window.markdownit({
+        html: true,
+        linkify: true,
+        typographer: true,
+        highlight: function (str, lang) {
+          if (lang && hljs.getLanguage(lang)) {
+            try {
+              return (
+                '<pre class="hljs"><code>' +
+                hljs.highlight(str, { language: lang, ignoreIllegals: true })
+                  .value +
+                '</code></pre>'
+              )
+            } catch (__) {}
+          }
+          return (
+            '<pre class="hljs"><code>' +
+            md.utils.escapeHtml(str) +
+            '</code></pre>'
+          )
+        },
+      })
+
+      // 获取DOM元素
+      const rawInput = document.getElementById('raw-input')
+      const btnParse = document.getElementById('btn-parse')
+      const btnPlay = document.getElementById('btn-play')
+      const reasoningBox = document.getElementById('reasoning-box')
+      const reasoningContent = document.getElementById('reasoning-content')
+      const mainContent = document.getElementById('main-content')
+      const scrollContainer = document.getElementById('output-scroll-container')
+
+      // 提供一段默认的演示数据（融合了你的数据并加入了 reasoning_content）
+      const defaultData = `data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1710000000,"model":"gpt-4-turbo","choices":[{"index":0,"delta":{"role":"assistant","content":null,"reasoning_content":"这是一道关于解析SSE流式数据并在前端展示的问题。\\n"},"finish_reason":null,"isFinish":false}]}
+data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1710000000,"model":"gpt-4-turbo","choices":[{"index":0,"delta":{"reasoning_content":"用户不仅需要解析正文，还希望优雅地折叠展示 \`reasoning_content\`（思考过程）。\\n因此，我要用 TailwindCSS 画一个折叠框。\\n"},"finish_reason":null,"isFinish":false}]}
+data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1710000000,"model":"gpt-4-turbo","choices":[{"index":0,"delta":{"content":"## 优雅的展示界面\\n\\n"},"reasoning_content":null,"finish_reason":null,"isFinish":false}]}
+data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1710000000,"model":"gpt-4-turbo","choices":[{"index":0,"delta":{"content":"这里是为您渲染的正文内容。\\n\\n"},"finish_reason":null,"isFinish":false}]}
+data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1710000000,"model":"gpt-4-turbo","choices":[{"index":0,"delta":{"content":"**主要特性包含：**\\n1. \`Markdown\` 实时解析\\n2. 优雅的折叠思考过程\\n3. 流式打字机效果"},"finish_reason":null,"isFinish":false}]}
+data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1710000000,"model":"gpt-4-turbo","choices":[{"index":0,"delta":{"role":"assistant","content":null,"reasoning_content":null,"isContent":false,"isReason":false},"finish_reason":"stop","isFinish":true}]}
+data: [DONE]`
+
+      rawInput.value = defaultData
+
+      // 重置UI状态
+      function resetUI() {
+        reasoningBox.classList.add('hidden')
+        reasoningContent.innerHTML = ''
+        mainContent.innerHTML = ''
+      }
+
+      // 解析渲染核心逻辑
+      function render(textData, isStreaming = false) {
+        const lines = textData.split('\n')
+        let accumulatedReasoning = ''
+        let accumulatedContent = ''
+
+        for (let line of lines) {
+          line = line.trim()
+          if (!line) continue
+          if (line.startsWith('data: ')) {
+            const jsonStr = line.substring(6).trim()
+            if (jsonStr === '[DONE]') break
+
+            try {
+              const data = JSON.parse(jsonStr)
+              const delta =
+                data.choices && data.choices[0] && data.choices[0].delta
+              if (delta) {
+                if (delta.reasoning_content) {
+                  accumulatedReasoning += delta.reasoning_content
+                }
+                if (delta.content) {
+                  accumulatedContent += delta.content
+                }
+              }
+            } catch (e) {
+              console.warn('解析 JSON 失败, 跳过此行:', line)
+            }
+          }
+        }
+
+        // 更新思考过程视图
+        if (accumulatedReasoning) {
+          reasoningBox.classList.remove('hidden')
+          reasoningContent.innerHTML = md.render(accumulatedReasoning)
+        }
+
+        // 更新正文视图
+        if (accumulatedContent) {
+          mainContent.innerHTML = md.render(accumulatedContent)
+        }
+
+        // 流式输出时自动滚动到底部
+        if (isStreaming) {
+          scrollContainer.scrollTop = scrollContainer.scrollHeight
+        }
+      }
+
+      // 瞬间一键解析
+      btnParse.addEventListener('click', () => {
+        resetUI()
+        render(rawInput.value)
+      })
+
+      // 模拟真实流式播放（按行延迟解析）
+      btnPlay.addEventListener('click', async () => {
+        resetUI()
+        const textData = rawInput.value
+        const lines = textData.split('\n')
+
+        // 禁用按钮防抖
+        btnPlay.disabled = true
+        btnPlay.classList.add('opacity-50', 'cursor-not-allowed')
+
+        let currentStreamText = ''
+        for (let i = 0; i < lines.length; i++) {
+          currentStreamText += lines[i] + '\n'
+          render(currentStreamText, true)
+
+          // 增加几十毫秒的延迟，模拟真实网络传输和打字效果
+          await new Promise((resolve) => setTimeout(resolve, 40))
+        }
+
+        btnPlay.disabled = false
+        btnPlay.classList.remove('opacity-50', 'cursor-not-allowed')
+      })
+    </script>
+  </body>
+</html>
