@@ -1,249 +1,314 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI Gen Demo - 纯前端数据处理工具集</title>
     <style>
-        :root {
-            --primary-color: #4f46e5;
-            --primary-hover: #4338ca;
-            --bg-gradient: linear-gradient(135deg, #f0f4fd 0%, #e4ebf7 100%);
-            --card-bg: rgba(255, 255, 255, 0.9);
-            --text-main: #1e293b;
-            --text-muted: #64748b;
-        }
+      :root {
+        --primary-color: #4f46e5;
+        --primary-hover: #4338ca;
+        --bg-gradient: linear-gradient(135deg, #f0f4fd 0%, #e4ebf7 100%);
+        --card-bg: rgba(255, 255, 255, 0.9);
+        --text-main: #1e293b;
+        --text-muted: #64748b;
+      }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-        }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          'Helvetica Neue', Arial, sans-serif;
+      }
 
-        body {
-            background: var(--bg-gradient);
-            color: var(--text-main);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 2rem;
-            line-height: 1.6;
-        }
+      body {
+        background: var(--bg-gradient);
+        color: var(--text-main);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 2rem;
+        line-height: 1.6;
+      }
 
-        /* 顶部标题区 */
-        header {
-            text-align: center;
-            margin-bottom: 4rem;
-            margin-top: 2rem;
-            animation: fadeInDown 0.8s ease-out;
-        }
+      /* 顶部标题区 */
+      header {
+        text-align: center;
+        margin-bottom: 4rem;
+        margin-top: 2rem;
+        animation: fadeInDown 0.8s ease-out;
+      }
 
+      header h1 {
+        font-size: 2.5rem;
+        font-weight: 800;
+        margin-bottom: 1rem;
+        background: linear-gradient(to right, #4f46e5, #ec4899);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+
+      header p {
+        font-size: 1.1rem;
+        color: var(--text-muted);
+        max-width: 600px;
+        margin: 0 auto;
+      }
+
+      /* 卡片网格布局 */
+      .container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 2rem;
+        width: 100%;
+        max-width: 1200px;
+        animation: fadeInUp 0.8s ease-out;
+      }
+
+      /* 独立卡片样式 */
+      .card {
+        background: var(--card-bg);
+        border-radius: 20px;
+        padding: 2rem;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.5);
+        display: flex;
+        flex-direction: column;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 4px;
+        background: var(--primary-color);
+        transform: scaleX(0);
+        transform-origin: left;
+        transition: transform 0.4s ease;
+      }
+
+      .card:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+      }
+
+      .card:hover::before {
+        transform: scaleX(1);
+      }
+
+      /* 针对不同卡片设置不同颜色的顶部条 */
+      .card:nth-child(1)::before {
+        background: #10b981;
+      } /* Excel - 绿色 */
+      .card:nth-child(2)::before {
+        background: #f59e0b;
+      } /* JSON - 黄色 */
+      .card:nth-child(3)::before {
+        background: #3b82f6;
+      } /* Parquet - 蓝色 */
+
+      .icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+      }
+
+      .card h2 {
+        font-size: 1.4rem;
+        margin-bottom: 1rem;
+        color: var(--text-main);
+      }
+
+      .card p {
+        color: var(--text-muted);
+        font-size: 0.95rem;
+        margin-bottom: 1.5rem;
+        flex-grow: 1;
+      }
+
+      /* 标签样式 */
+      .tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 2rem;
+      }
+
+      .tag {
+        background: #f1f5f9;
+        color: var(--text-muted);
+        font-size: 0.8rem;
+        padding: 0.25rem 0.75rem;
+        border-radius: 999px;
+        font-weight: 500;
+      }
+
+      /* 按钮样式 */
+      .btn {
+        display: inline-block;
+        text-align: center;
+        width: 100%;
+        padding: 0.8rem;
+        background-color: var(--primary-color);
+        color: white;
+        text-decoration: none;
+        border-radius: 10px;
+        font-weight: 600;
+        transition:
+          background-color 0.2s,
+          transform 0.1s;
+        margin-top: auto;
+      }
+
+      .btn:hover {
+        background-color: var(--primary-hover);
+      }
+
+      .btn:active {
+        transform: scale(0.98);
+      }
+
+      /* 动画关键帧 */
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(30px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes fadeInDown {
+        from {
+          opacity: 0;
+          transform: translateY(-30px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* 底部版权 */
+      footer {
+        margin-top: auto;
+        padding-top: 4rem;
+        color: var(--text-muted);
+        font-size: 0.9rem;
+      }
+
+      /* 响应式调整 */
+      @media (max-width: 768px) {
         header h1 {
-            font-size: 2.5rem;
-            font-weight: 800;
-            margin-bottom: 1rem;
-            background: linear-gradient(to right, #4f46e5, #ec4899);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+          font-size: 2rem;
         }
-
-        header p {
-            font-size: 1.1rem;
-            color: var(--text-muted);
-            max-width: 600px;
-            margin: 0 auto;
-        }
-
-        /* 卡片网格布局 */
         .container {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 2rem;
-            width: 100%;
-            max-width: 1200px;
-            animation: fadeInUp 0.8s ease-out;
+          padding: 0 1rem;
         }
-
-        /* 独立卡片样式 */
         .card {
-            background: var(--card-bg);
-            border-radius: 20px;
-            padding: 2rem;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.5);
-            display: flex;
-            flex-direction: column;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-            overflow: hidden;
+          padding: 1.5rem;
         }
-
-        .card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 4px;
-            background: var(--primary-color);
-            transform: scaleX(0);
-            transform-origin: left;
-            transition: transform 0.4s ease;
-        }
-
-        .card:hover {
-            transform: translateY(-8px);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-        }
-
-        .card:hover::before {
-            transform: scaleX(1);
-        }
-
-        /* 针对不同卡片设置不同颜色的顶部条 */
-        .card:nth-child(1)::before { background: #10b981; } /* Excel - 绿色 */
-        .card:nth-child(2)::before { background: #f59e0b; } /* JSON - 黄色 */
-        .card:nth-child(3)::before { background: #3b82f6; } /* Parquet - 蓝色 */
-
-        .icon {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-        }
-
-        .card h2 {
-            font-size: 1.4rem;
-            margin-bottom: 1rem;
-            color: var(--text-main);
-        }
-
-        .card p {
-            color: var(--text-muted);
-            font-size: 0.95rem;
-            margin-bottom: 1.5rem;
-            flex-grow: 1;
-        }
-
-        /* 标签样式 */
-        .tags {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-            margin-bottom: 2rem;
-        }
-
-        .tag {
-            background: #f1f5f9;
-            color: var(--text-muted);
-            font-size: 0.8rem;
-            padding: 0.25rem 0.75rem;
-            border-radius: 999px;
-            font-weight: 500;
-        }
-
-        /* 按钮样式 */
-        .btn {
-            display: inline-block;
-            text-align: center;
-            width: 100%;
-            padding: 0.8rem;
-            background-color: var(--primary-color);
-            color: white;
-            text-decoration: none;
-            border-radius: 10px;
-            font-weight: 600;
-            transition: background-color 0.2s, transform 0.1s;
-            margin-top: auto;
-        }
-
-        .btn:hover {
-            background-color: var(--primary-hover);
-        }
-
-        .btn:active {
-            transform: scale(0.98);
-        }
-
-        /* 动画关键帧 */
-        @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(30px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        @keyframes fadeInDown {
-            from { opacity: 0; transform: translateY(-30px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        /* 底部版权 */
-        footer {
-            margin-top: auto;
-            padding-top: 4rem;
-            color: var(--text-muted);
-            font-size: 0.9rem;
-        }
-
-        /* 响应式调整 */
-        @media (max-width: 768px) {
-            header h1 { font-size: 2rem; }
-            .container { padding: 0 1rem; }
-            .card { padding: 1.5rem; }
-        }
+      }
     </style>
-</head>
-<body>
-
+  </head>
+  <body>
     <header>
-        <h1>🚀 AI Gen Demo Tools</h1>
-        <p>探索由纯前端技术打造的高性能数据处理与可视化工具，体验无后端、零延迟的数据交互。</p>
+      <h1>🚀 AI Gen Demo Tools</h1>
+      <p>
+        探索由纯前端技术打造的高性能数据处理与可视化工具，体验无后端、零延迟的数据交互。
+      </p>
     </header>
 
     <main class="container">
-        <!-- 项目 1: VTable Excel -->
-        <article class="card">
-            <div class="icon">📊</div>
-            <h2>百万级 Excel 数据极速筛选</h2>
-            <p>基于 Web Worker 和 VTable 构建的高性能数据查看器。支持拖拽上传、复杂逻辑搜索，无需后端支持，主线程不卡顿。</p>
-            <div class="tags">
-                <span class="tag">VTable</span>
-                <span class="tag">Web Worker</span>
-                <span class="tag">SheetJS</span>
-            </div>
-            <a href="./excel-display.html" class="btn" target="_blank">在线体验 Demo</a>
-        </article>
+      <!-- 项目 1: VTable Excel -->
+      <article class="card">
+        <div class="icon">📊</div>
+        <h2>百万级 Excel 数据极速筛选</h2>
+        <p>
+          基于 Web Worker 和 VTable
+          构建的高性能数据查看器。支持拖拽上传、复杂逻辑搜索，无需后端支持，主线程不卡顿。
+        </p>
+        <div class="tags">
+          <span class="tag">VTable</span>
+          <span class="tag">Web Worker</span>
+          <span class="tag">SheetJS</span>
+        </div>
+        <a href="./excel-display.html" class="btn" target="_blank"
+          >在线体验 Demo</a
+        >
+      </article>
 
-        <!-- 项目 2: 大 JSON 可视化 -->
-        <article class="card">
-            <div class="icon">🧠</div>
-            <h2>超大 JSON 可视化预览</h2>
-            <p>专为几十MB级超大 JSON 设计。利用虚拟列表（Virtual Scroll）和按需加载技术，突破 DOM 渲染瓶颈，60fps 丝滑滚动浏览。</p>
-            <div class="tags">
-                <span class="tag">Vanilla JS</span>
-                <span class="tag">虚拟滚动</span>
-                <span class="tag">零依赖</span>
-            </div>
-            <a href="./large-json-preview.html" class="btn" target="_blank">在线体验 Demo</a>
-        </article>
+      <!-- 项目 2: 大 JSON 可视化 -->
+      <article class="card">
+        <div class="icon">🧠</div>
+        <h2>超大 JSON 可视化预览</h2>
+        <p>
+          专为几十MB级超大 JSON 设计。利用虚拟列表（Virtual
+          Scroll）和按需加载技术，突破 DOM 渲染瓶颈，60fps 丝滑滚动浏览。
+        </p>
+        <div class="tags">
+          <span class="tag">Vanilla JS</span>
+          <span class="tag">虚拟滚动</span>
+          <span class="tag">零依赖</span>
+        </div>
+        <a href="./large-json-preview.html" class="btn" target="_blank"
+          >在线体验 Demo</a
+        >
+      </article>
 
-        <!-- 项目 3: Parquet 预览 -->
-        <article class="card">
-            <div class="icon">📦</div>
-            <h2>Parquet 本地预览与搜索</h2>
-            <p>轻量级纯前端 .parquet 文件查看器。利用 WebAssembly 本地极速解析，数据 0 字节上传保障隐私，支持实时多关键词全文检索。</p>
-            <div class="tags">
-                <span class="tag">WebAssembly</span>
-                <span class="tag">hyparquet</span>
-                <span class="tag">纯本地解析</span>
-            </div>
-            <a href="./parquet-preview.html" class="btn" target="_blank">在线体验 Demo</a>
-        </article>
+      <!-- 项目 3: Parquet 预览 -->
+      <article class="card">
+        <div class="icon">📦</div>
+        <h2>Parquet 本地预览与搜索</h2>
+        <p>
+          轻量级纯前端 .parquet 文件查看器。利用 WebAssembly 本地极速解析，数据
+          0 字节上传保障隐私，支持实时多关键词全文检索。
+        </p>
+        <div class="tags">
+          <span class="tag">WebAssembly</span>
+          <span class="tag">hyparquet</span>
+          <span class="tag">纯本地解析</span>
+        </div>
+        <a href="./parquet-preview.html" class="btn" target="_blank"
+          >在线体验 Demo</a
+        >
+      </article>
+
+      <!-- 项目 3: Parquet 预览 -->
+      <article class="card">
+        <div class="icon">📦</div>
+        <h2>Qwen3.5 WebGPU本地对话</h2>
+        <p>
+          一个开箱即用、单文件驱动的纯前端大语言模型聊天应用。基于
+          Transformers.js 和 WebGPU 技术，
+          让你无需任何后端服务器，即可在浏览器中直接本地运行 Qwen3.5
+          视觉语言大模型（VLM）！
+        </p>
+        <div class="tags">
+          <span class="tag">Transformers.js</span>
+          <span class="tag">WebGPU</span>
+          <span class="tag">Qwen3.5</span>
+        </div>
+        <a href="./qwen-webgpu-chat.html" class="btn" target="_blank"
+          >在线体验 Demo</a
+        >
+      </article>
     </main>
 
     <footer>
-        <p>&copy; 2024 AI Generated Tools Collection. Built with ❤️ and Vanilla JS.</p>
+      <p>
+        &copy; 2024 AI Generated Tools Collection. Built with ❤️ and Vanilla JS.
+      </p>
     </footer>
-
-</body>
+  </body>
 </html>
