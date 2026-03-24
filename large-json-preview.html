@@ -3,9 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>超大 JSON 可视化 (虚拟列表+搜索版)</title>
+    <title>超大 JSON 可视化 (虚拟列表 + 搜索版)</title>
     <style>
       :root {
+        /* 深色模式（默认） */
         --bg-color: #1e1e1e;
         --panel-bg: #252526;
         --text-color: #d4d4d4;
@@ -18,7 +19,32 @@
         --border-color: #444;
         --btn-bg: #0e639c;
         --btn-hover: #1177bb;
-        --highlight-bg: #613214; /* 搜索命中的背景色 */
+        --highlight-bg: #613214;
+        --input-bg: #1e1e1e;
+        --scrollbar-thumb: #444;
+        --scrollbar-track: #1e1e1e;
+      }
+
+      /* 浅色模式 - 跟随系统设置 */
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg-color: #ffffff;
+          --panel-bg: #f3f3f3;
+          --text-color: #333333;
+          --key-color: #0066cc;
+          --string-color: #a31515;
+          --number-color: #098658;
+          --boolean-color: #0000ff;
+          --null-color: #800080;
+          --hover-bg: #e8e8e8;
+          --border-color: #cccccc;
+          --btn-bg: #0078d4;
+          --btn-hover: #106ebe;
+          --highlight-bg: #fff4ce;
+          --input-bg: #ffffff;
+          --scrollbar-thumb: #cccccc;
+          --scrollbar-track: #f3f3f3;
+        }
       }
 
       body {
@@ -32,6 +58,7 @@
         display: flex;
         flex-direction: column;
         overflow: hidden;
+        transition: background-color 0.3s, color 0.3s;
       }
 
       .control-panel {
@@ -40,8 +67,9 @@
         border: 1px solid var(--border-color);
         border-radius: 8px;
         margin-bottom: 10px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         flex-shrink: 0;
+        transition: background-color 0.3s, border-color 0.3s;
       }
 
       .panel-section {
@@ -58,6 +86,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
+        transition: background-color 0.3s;
       }
 
       .divider span {
@@ -77,16 +106,22 @@
         display: flex;
         align-items: center;
         gap: 10px;
+        transition: background-color 0.3s, border-color 0.3s;
       }
 
       .search-input {
         flex: 1;
-        background: var(--bg-color);
+        background: var(--input-bg);
         border: 1px solid var(--border-color);
         color: var(--text-color);
         padding: 8px 12px;
         border-radius: 4px;
         outline: none;
+        transition: background-color 0.3s, border-color 0.3s, color 0.3s;
+      }
+
+      .search-input::placeholder {
+        color: #888;
       }
 
       .search-input:focus {
@@ -110,18 +145,19 @@
 
       textarea {
         height: 40px;
-        background-color: var(--bg-color);
+        background-color: var(--input-bg);
         color: var(--text-color);
         border: 1px solid var(--border-color);
         border-radius: 4px;
         padding: 8px;
         font-family: inherit;
         resize: none;
-        scrollbar-width: none; /* Firefox */
-        -ms-overflow-style: none; /* IE/Edge */
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+        transition: background-color 0.3s, border-color 0.3s, color 0.3s;
       }
       textarea::-webkit-scrollbar {
-        display: none; /* Chrome/Safari/Webkit */
+        display: none;
       }
 
       #loading {
@@ -137,7 +173,23 @@
         overflow-y: auto;
         position: relative;
         border: 1px solid var(--border-color);
-        background: #1e1e1e;
+        background: var(--bg-color);
+        transition: background-color 0.3s, border-color 0.3s;
+      }
+
+      /* 自定义滚动条 */
+      #viewport::-webkit-scrollbar {
+        width: 10px;
+      }
+      #viewport::-webkit-scrollbar-track {
+        background: var(--scrollbar-track);
+      }
+      #viewport::-webkit-scrollbar-thumb {
+        background: var(--scrollbar-thumb);
+        border-radius: 5px;
+      }
+      #viewport::-webkit-scrollbar-thumb:hover {
+        background: var(--border-color);
       }
 
       #content {
@@ -155,6 +207,7 @@
         cursor: pointer;
         white-space: nowrap;
         user-select: text;
+        transition: background-color 0.2s;
       }
 
       .tree-row:hover {
@@ -204,9 +257,34 @@
         font-size: 12px;
         color: #aaa;
       }
+
+      /* 主题切换按钮 */
+      .theme-toggle {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        background: var(--panel-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        z-index: 1000;
+        transition: background-color 0.3s, border-color 0.3s;
+      }
+      .theme-toggle:hover {
+        background-color: var(--hover-bg);
+      }
     </style>
   </head>
   <body>
+    <!-- 主题切换按钮 -->
+    <button class="theme-toggle" id="themeToggle" title="切换主题">🌓</button>
+
     <div class="control-panel">
       <div class="panel-section">
         <label class="btn" style="width: fit-content">
@@ -227,7 +305,7 @@
         type="text"
         id="searchInput"
         class="search-input"
-        placeholder="输入关键字搜索，支持多关键字用 | 分割 (例如: name|1001)"
+        placeholder="输入关键字搜索，支持多关键字用 | 分割 (例如：name|1001)"
       />
       <span id="matchInfo" class="match-count"></span>
     </div>
@@ -243,9 +321,10 @@
       const ROW_HEIGHT = 24
       const BUFFER_SIZE = 15
 
-      let rawData = null // 完整的原始数据
-      let visibleList = [] // 当前虚拟列表中展示的扁平化节点
-      let searchTimer = null // 防抖计时器
+      let rawData = null
+      let visibleList = []
+      let searchTimer = null
+      let forcedTheme = null // 'light' | 'dark' | null (跟随系统)
 
       const viewport = document.getElementById('viewport')
       const spacer = document.getElementById('spacer')
@@ -253,6 +332,62 @@
       const loading = document.getElementById('loading')
       const searchInput = document.getElementById('searchInput')
       const matchInfo = document.getElementById('matchInfo')
+      const themeToggle = document.getElementById('themeToggle')
+
+      // --- 主题切换逻辑 ---
+      function getSystemTheme() {
+        return window.matchMedia('(prefers-color-scheme: light)').matches 
+          ? 'light' 
+          : 'dark'
+      }
+
+      function applyTheme(theme) {
+        if (theme === 'light') {
+          document.documentElement.style.setProperty('--forced-theme', 'light')
+          themeToggle.textContent = '☀️'
+        } else if (theme === 'dark') {
+          document.documentElement.style.setProperty('--forced-theme', 'dark')
+          themeToggle.textContent = '🌙'
+        } else {
+          document.documentElement.style.removeProperty('--forced-theme')
+          themeToggle.textContent = '🌓'
+        }
+      }
+
+      function toggleTheme() {
+        const currentSystem = getSystemTheme()
+        if (forcedTheme === null) {
+          // 从跟随系统切换到强制相反主题
+          forcedTheme = currentSystem === 'light' ? 'dark' : 'light'
+        } else if (forcedTheme === 'light') {
+          forcedTheme = 'dark'
+        } else {
+          forcedTheme = null // 回到跟随系统
+        }
+        applyTheme(forcedTheme)
+        localStorage.setItem('jsonViewerTheme', forcedTheme || 'auto')
+      }
+
+      // 初始化主题
+      function initTheme() {
+        const saved = localStorage.getItem('jsonViewerTheme')
+        if (saved === 'light' || saved === 'dark') {
+          forcedTheme = saved
+        } else {
+          forcedTheme = null
+        }
+        applyTheme(forcedTheme)
+      }
+
+      // 监听系统主题变化
+      window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+        if (forcedTheme === null) {
+          applyTheme(null)
+        }
+      })
+
+      themeToggle.addEventListener('click', toggleTheme)
+      initTheme()
 
       // --- 工具函数 ---
       function getType(val) {
@@ -304,7 +439,6 @@
       }
 
       // --- 搜索过滤逻辑 ---
-      // 采用“保留匹配路径”策略：如果子节点匹配，父节点必须展示
       function filterData(data, regex) {
         let matchCount = 0
 
@@ -314,7 +448,6 @@
           const valueString =
             type !== 'object' && type !== 'array' ? String(obj) : ''
 
-          // 检查当前节点是否匹配
           const isMatch =
             regex.test(keyString) || (valueString && regex.test(valueString))
           if (isMatch) matchCount++
@@ -328,7 +461,6 @@
               if (childResult) children.push(childResult)
             }
 
-            // 如果自己匹配，或者有任何子节点匹配，则保留此节点
             if (isMatch || children.length > 0) {
               return {
                 key:
@@ -340,7 +472,7 @@
                 value: obj,
                 type: type,
                 depth: depth,
-                isExpanded: true, // 搜索模式下默认展开
+                isExpanded: true,
                 hasChildren: keys.length > 0,
                 summary:
                   type === 'object'
@@ -367,7 +499,6 @@
 
         const filteredTree = traverse(data, 0)
 
-        // 将过滤后的树拍扁供虚拟列表使用
         const flatList = []
         function flatten(node) {
           if (!node) return
@@ -433,13 +564,11 @@
 
         if (!term) {
           matchInfo.textContent = ''
-          // 恢复初始状态：只显示根及其第一层子节点
           initView(rawData)
           return
         }
 
         try {
-          // 支持 | 分割关键字
           const pattern = term
             .split('|')
             .filter((s) => s.trim())
@@ -449,7 +578,6 @@
 
           loading.style.display = 'block'
 
-          // 延时执行防止 UI 冻结
           setTimeout(() => {
             const result = filterData(rawData, regex)
             visibleList = result.list
@@ -486,7 +614,7 @@
       // --- 事件监听 ---
       searchInput.addEventListener('input', () => {
         clearTimeout(searchTimer)
-        searchTimer = setTimeout(handleSearch, 400) // 400ms 防抖
+        searchTimer = setTimeout(handleSearch, 400)
       })
 
       viewport.addEventListener('scroll', () =>
@@ -495,8 +623,6 @@
       window.addEventListener('resize', updateScroll)
 
       content.addEventListener('click', (e) => {
-        // 搜索模式下点击折叠功能逻辑比较复杂（因为涉及路径完整性），
-        // 这里采用简单的折叠逻辑，如果用户正在搜索，点击将照常执行折叠
         const row = e.target.closest('.tree-row')
         if (!row) return
         const index = parseInt(row.getAttribute('data-index'))
@@ -519,7 +645,6 @@
         updateScroll()
       })
 
-      // 文件上传/文本解析逻辑
       const handleRawData = (data) => {
         rawData = data
         searchInput.value = ''
@@ -537,7 +662,7 @@
           try {
             handleRawData(JSON.parse(ev.target.result))
           } catch (err) {
-            alert('JSON解析失败')
+            alert('JSON 解析失败')
           }
           loading.style.display = 'none'
         }
@@ -550,7 +675,7 @@
         try {
           handleRawData(JSON.parse(txt))
         } catch (err) {
-          alert('JSON解析失败')
+          alert('JSON 解析失败')
         }
       })
     </script>

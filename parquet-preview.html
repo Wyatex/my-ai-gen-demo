@@ -1,506 +1,641 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Parquet 文件预览器</title>
     <style>
-        body {
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f9fafb;
-            color: #1f2937;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: #ffffff;
-            padding: 24px;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-        }
-        h1 {
-            margin-top: 0;
-            font-size: 24px;
-            color: #111827;
-        }
-        p.description {
-            color: #6b7280;
-            font-size: 14px;
-            margin-bottom: 20px;
-        }
-        .controls {
-            margin-bottom: 20px;
-            padding: 16px;
-            background-color: #f3f4f6;
-            border-radius: 8px;
-            border: 1px dashed #d1d5db;
-        }
-        .control-row {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            margin-bottom: 12px;
-            flex-wrap: wrap;
-        }
-        .control-row:last-child {
-            margin-bottom: 0;
-        }
-        input[type="file"]::file-selector-button {
-            padding: 8px 16px;
-            border-radius: 6px;
-            border: none;
-            background-color: #2563eb;
-            color: white;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-        input[type="file"]::file-selector-button:hover {
-            background-color: #1d4ed8;
-        }
-        #searchInput {
-            flex: 1;
-            min-width: 300px;
-            padding: 8px 12px;
-            border: 1px solid #d1d5db;
-            border-radius: 6px;
-            font-size: 14px;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-        #searchInput:focus {
-            border-color: #2563eb;
-            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
-        }
-        #searchInput:disabled {
-            background-color: #e5e7eb;
-            cursor: not-allowed;
-        }
-        #status, #searchStatus {
-            font-size: 14px;
-            color: #4b5563;
-            font-weight: 500;
-        }
-        .table-container {
-            overflow-x: auto;
-            max-height: 60vh;
-            overflow-y: auto;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            background-color: #ffffff;
-        }
-        table {
-            border-collapse: collapse;
-            width: 100%;
-            font-size: 13px;
-            white-space: nowrap;
-        }
-        th, td {
-            padding: 10px 14px;
-            border-bottom: 1px solid #e5e7eb;
-            border-right: 1px solid #e5e7eb;
-            /* 限制列宽并截断长文本 */
-            max-width: 200px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        th:last-child, td:last-child {
-            border-right: none;
-        }
-        th {
-            background-color: #f8fafc;
-            font-weight: 600;
-            color: #334155;
-            position: sticky;
-            top: 0;
-            z-index: 10;
-            box-shadow: 0 1px 0 #e5e7eb;
-        }
-        tbody tr {
-            cursor: pointer; /* 增加手型，提示可点击 */
-        }
-        tbody tr:hover td {
-            background-color: #f1f5f9;
-        }
-        /* 滚动条美化 */
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+      /* ========== CSS 变量定义 ========== */
+      :root {
+        /* 浅色模式（默认） */
+        --bg-primary: #f9fafb;
+        --bg-secondary: #ffffff;
+        --bg-tertiary: #f3f4f6;
+        --bg-hover: #f1f5f9;
+        --bg-header: #f8fafc;
+        --bg-input-disabled: #e5e7eb;
+        --bg-modal-overlay: rgba(0, 0, 0, 0.5);
+        --bg-value: #f9fafb;
 
-        /* --- 弹窗样式开始 --- */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background-color: rgba(0, 0, 0, 0.5);
-            z-index: 9999;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
+        --text-primary: #111827;
+        --text-secondary: #1f2937;
+        --text-muted: #6b7280;
+        --text-placeholder: #9ca3af;
+
+        --border-color: #e5e7eb;
+        --border-dashed: #d1d5db;
+
+        --accent-primary: #2563eb;
+        --accent-hover: #1d4ed8;
+        --accent-focus: rgba(37, 99, 235, 0.2);
+
+        --status-success: #16a34a;
+        --status-warning: #d97706;
+        --status-error: #dc2626;
+        --status-info: #2563eb;
+
+        --scrollbar-track: #f1f1f1;
+        --scrollbar-thumb: #cbd5e1;
+        --scrollbar-thumb-hover: #94a3b8;
+
+        --shadow-sm: 0 1px 0 #e5e7eb;
+        --shadow-md:
+          0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        --shadow-lg:
+          0 20px 25px -5px rgba(0, 0, 0, 0.1),
+          0 10px 10px -5px rgba(0, 0, 0, 0.04);
+      }
+
+      /* ========== 深色模式 ========== */
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg-primary: #0f172a;
+          --bg-secondary: #1e293b;
+          --bg-tertiary: #334155;
+          --bg-hover: #374151;
+          --bg-header: #1e293b;
+          --bg-input-disabled: #4b5563;
+          --bg-modal-overlay: rgba(0, 0, 0, 0.7);
+          --bg-value: #334155;
+
+          --text-primary: #f9fafb;
+          --text-secondary: #e5e7eb;
+          --text-muted: #9ca3af;
+          --text-placeholder: #6b7280;
+
+          --border-color: #4b5563;
+          --border-dashed: #6b7280;
+
+          --accent-primary: #3b82f6;
+          --accent-hover: #60a5fa;
+          --accent-focus: rgba(59, 130, 246, 0.3);
+
+          --status-success: #22c55e;
+          --status-warning: #f59e0b;
+          --status-error: #ef4444;
+          --status-info: #3b82f6;
+
+          --scrollbar-track: #1e293b;
+          --scrollbar-thumb: #4b5563;
+          --scrollbar-thumb-hover: #6b7280;
+
+          --shadow-sm: 0 1px 0 #334155;
+          --shadow-md:
+            0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+          --shadow-lg:
+            0 20px 25px -5px rgba(0, 0, 0, 0.5),
+            0 10px 10px -5px rgba(0, 0, 0, 0.3);
         }
-        .modal-content {
-            background-color: #ffffff;
-            width: 80vw; /* 设置弹窗宽度 80vw */
-            max-height: 85vh;
-            border-radius: 12px;
-            display: flex;
-            flex-direction: column;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-            animation: modalFadeIn 0.2s ease-out;
+      }
+
+      /* ========== 基础样式 ========== */
+      body {
+        font-family:
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: var(--bg-primary);
+        color: var(--text-secondary);
+        transition:
+          background-color 0.3s ease,
+          color 0.3s ease;
+      }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: var(--bg-secondary);
+        padding: 24px;
+        border-radius: 12px;
+        box-shadow: var(--shadow-md);
+        transition:
+          background-color 0.3s ease,
+          box-shadow 0.3s ease;
+      }
+      h1 {
+        margin-top: 0;
+        font-size: 24px;
+        color: var(--text-primary);
+      }
+      p.description {
+        color: var(--text-muted);
+        font-size: 14px;
+        margin-bottom: 20px;
+      }
+      .controls {
+        margin-bottom: 20px;
+        padding: 16px;
+        background-color: var(--bg-tertiary);
+        border-radius: 8px;
+        border: 1px dashed var(--border-dashed);
+        transition:
+          background-color 0.3s ease,
+          border-color 0.3s ease;
+      }
+      .control-row {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+      }
+      .control-row:last-child {
+        margin-bottom: 0;
+      }
+      input[type='file']::file-selector-button {
+        padding: 8px 16px;
+        border-radius: 6px;
+        border: none;
+        background-color: var(--accent-primary);
+        color: white;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+      input[type='file']::file-selector-button:hover {
+        background-color: var(--accent-hover);
+      }
+      #searchInput {
+        flex: 1;
+        min-width: 300px;
+        padding: 8px 12px;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        font-size: 14px;
+        outline: none;
+        transition:
+          border-color 0.2s,
+          background-color 0.3s ease;
+        background-color: var(--bg-secondary);
+        color: var(--text-primary);
+      }
+      #searchInput::placeholder {
+        color: var(--text-placeholder);
+      }
+      #searchInput:focus {
+        border-color: var(--accent-primary);
+        box-shadow: 0 0 0 2px var(--accent-focus);
+      }
+      #searchInput:disabled {
+        background-color: var(--bg-input-disabled);
+        cursor: not-allowed;
+      }
+      #status,
+      #searchStatus {
+        font-size: 14px;
+        color: var(--text-muted);
+        font-weight: 500;
+      }
+      .table-container {
+        overflow-x: auto;
+        max-height: 60vh;
+        overflow-y: auto;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        background-color: var(--bg-secondary);
+        transition:
+          background-color 0.3s ease,
+          border-color 0.3s ease;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 13px;
+        white-space: nowrap;
+      }
+      th,
+      td {
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border-color);
+        border-right: 1px solid var(--border-color);
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        transition:
+          border-color 0.3s ease,
+          background-color 0.3s ease;
+      }
+      th:last-child,
+      td:last-child {
+        border-right: none;
+      }
+      th {
+        background-color: var(--bg-header);
+        font-weight: 600;
+        color: var(--text-secondary);
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        box-shadow: var(--shadow-sm);
+        transition:
+          background-color 0.3s ease,
+          color 0.3s ease,
+          box-shadow 0.3s ease;
+      }
+      tbody tr {
+        cursor: pointer;
+      }
+      tbody tr:hover td {
+        background-color: var(--bg-hover);
+      }
+      /* 滚动条美化 */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: var(--scrollbar-track);
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--scrollbar-thumb);
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--scrollbar-thumb-hover);
+      }
+
+      /* ========== 弹窗样式 ========== */
+      .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: var(--bg-modal-overlay);
+        z-index: 9999;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+        transition: background-color 0.3s ease;
+      }
+      .modal-content {
+        background-color: var(--bg-secondary);
+        width: 80vw;
+        max-height: 85vh;
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+        box-shadow: var(--shadow-lg);
+        animation: modalFadeIn 0.2s ease-out;
+        transition:
+          background-color 0.3s ease,
+          box-shadow 0.3s ease;
+      }
+      @keyframes modalFadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(-10px);
         }
-        @keyframes modalFadeIn {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
+        to {
+          opacity: 1;
+          transform: translateY(0);
         }
-        .modal-header {
-            padding: 16px 24px;
-            border-bottom: 1px solid #e5e7eb;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background-color: #f8fafc;
-            border-radius: 12px 12px 0 0;
-        }
-        .modal-header h2 {
-            margin: 0;
-            font-size: 18px;
-            color: #111827;
-        }
-        .close-btn {
-            background: none;
-            border: none;
-            font-size: 24px;
-            line-height: 1;
-            color: #6b7280;
-            cursor: pointer;
-            padding: 0;
-            transition: color 0.2s;
-        }
-        .close-btn:hover {
-            color: #111827;
-        }
-        .modal-body {
-            padding: 24px;
-            overflow-y: auto;
-        }
-        /* 表单样式布局 */
-        .form-row {
-            display: flex;
-            padding: 12px 0;
-            border-bottom: 1px dashed #e5e7eb;
-        }
-        .form-row:last-child {
-            border-bottom: none;
-        }
-        .form-label {
-            width: 25%;
-            min-width: 120px;
-            font-weight: 600;
-            color: #4b5563;
-            padding-right: 16px;
-            word-break: break-all;
-        }
-        .form-value {
-            flex: 1;
-            color: #111827;
-            word-break: break-word;
-            white-space: pre-wrap; /* 允许长文本和 JSON 换行 */
-            background-color: #f9fafb;
-            padding: 8px 12px;
-            border-radius: 6px;
-            border: 1px solid #f3f4f6;
-        }
-        /* --- 弹窗样式结束 --- */
+      }
+      .modal-header {
+        padding: 16px 24px;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background-color: var(--bg-header);
+        border-radius: 12px 12px 0 0;
+        transition:
+          background-color 0.3s ease,
+          border-color 0.3s ease;
+      }
+      .modal-header h2 {
+        margin: 0;
+        font-size: 18px;
+        color: var(--text-primary);
+      }
+      .close-btn {
+        background: none;
+        border: none;
+        font-size: 24px;
+        line-height: 1;
+        color: var(--text-muted);
+        cursor: pointer;
+        padding: 0;
+        transition: color 0.2s;
+      }
+      .close-btn:hover {
+        color: var(--text-primary);
+      }
+      .modal-body {
+        padding: 24px;
+        overflow-y: auto;
+      }
+      .form-row {
+        display: flex;
+        padding: 12px 0;
+        border-bottom: 1px dashed var(--border-color);
+        transition: border-color 0.3s ease;
+      }
+      .form-row:last-child {
+        border-bottom: none;
+      }
+      .form-label {
+        width: 25%;
+        min-width: 120px;
+        font-weight: 600;
+        color: var(--text-muted);
+        padding-right: 16px;
+        word-break: break-all;
+      }
+      .form-value {
+        flex: 1;
+        color: var(--text-primary);
+        word-break: break-word;
+        white-space: pre-wrap;
+        background-color: var(--bg-value);
+        padding: 8px 12px;
+        border-radius: 6px;
+        border: 1px solid var(--border-color);
+        transition:
+          background-color 0.3s ease,
+          border-color 0.3s ease,
+          color 0.3s ease;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Parquet 文件预览与搜索</h1>
+      <p class="description">
+        纯前端解析（数据不上传）。默认提取前 1000
+        行数据，可以在下方输入框进行全文多关键词检索。<b
+          >点击任意数据行可查看完整详情。</b
+        >
+      </p>
 
-<div class="container">
-    <h1>Parquet 文件预览与搜索</h1>
-    <p class="description">纯前端解析（数据不上传）。默认提取前 1000 行数据，可以在下方输入框进行全文多关键词检索。<b>点击任意数据行可查看完整详情。</b></p>
-    
-    <div class="controls">
+      <div class="controls">
         <div class="control-row">
-            <input type="file" id="fileInput" accept=".parquet">
-            <div id="status">👉 请选择一个本地的 .parquet 文件</div>
+          <input type="file" id="fileInput" accept=".parquet" />
+          <div id="status">👉 请选择一个本地的 .parquet 文件</div>
         </div>
         <div class="control-row">
-            <input type="text" id="searchInput" placeholder="在数据中搜索 (多个关键词用 | 隔开，例如：成功|success)" disabled>
-            <div id="searchStatus"></div>
+          <input
+            type="text"
+            id="searchInput"
+            placeholder="在数据中搜索 (多个关键词用 | 隔开，例如：成功|success)"
+            disabled
+          />
+          <div id="searchStatus"></div>
         </div>
-    </div>
-    
-    <div class="table-container">
+      </div>
+
+      <div class="table-container">
         <table id="dataTable">
-            <thead></thead>
-            <tbody></tbody>
+          <thead></thead>
+          <tbody></tbody>
         </table>
+      </div>
     </div>
-</div>
 
-<div class="modal-overlay" id="detailModal">
-    <div class="modal-content">
+    <div class="modal-overlay" id="detailModal">
+      <div class="modal-content">
         <div class="modal-header">
-            <h2>行数据详情</h2>
-            <button class="close-btn" id="closeModalBtn">&times;</button>
+          <h2>行数据详情</h2>
+          <button class="close-btn" id="closeModalBtn">&times;</button>
         </div>
-        <div class="modal-body" id="modalBody">
-            </div>
+        <div class="modal-body" id="modalBody"></div>
+      </div>
     </div>
-</div>
 
-<script type="module">
-    import { parquetReadObjects } from 'https://cdn.jsdelivr.net/npm/hyparquet/+esm';
-    import { compressors } from 'https://cdn.jsdelivr.net/npm/hyparquet-compressors/+esm';
+    <script type="module">
+      import { parquetReadObjects } from 'https://cdn.jsdelivr.net/npm/hyparquet/+esm'
+      import { compressors } from 'https://cdn.jsdelivr.net/npm/hyparquet-compressors/+esm'
 
-    const fileInput = document.getElementById('fileInput');
-    const searchInput = document.getElementById('searchInput');
-    const status = document.getElementById('status');
-    const searchStatus = document.getElementById('searchStatus');
-    const tableHead = document.querySelector('#dataTable thead');
-    const tableBody = document.querySelector('#dataTable tbody');
+      const fileInput = document.getElementById('fileInput')
+      const searchInput = document.getElementById('searchInput')
+      const status = document.getElementById('status')
+      const searchStatus = document.getElementById('searchStatus')
+      const tableHead = document.querySelector('#dataTable thead')
+      const tableBody = document.querySelector('#dataTable tbody')
 
-    // 弹窗元素
-    const detailModal = document.getElementById('detailModal');
-    const closeModalBtn = document.getElementById('closeModalBtn');
-    const modalBody = document.getElementById('modalBody');
+      const detailModal = document.getElementById('detailModal')
+      const closeModalBtn = document.getElementById('closeModalBtn')
+      const modalBody = document.getElementById('modalBody')
 
-    // 全局存放当前解析出来的 Parquet 数据和列名
-    let globalData =[];
-    let globalColumns =[];
+      let globalData = []
+      let globalColumns = []
 
-    // --- 弹窗逻辑 ---
-    // 点击关闭按钮关闭弹窗
-    closeModalBtn.addEventListener('click', () => {
-        detailModal.style.display = 'none';
-    });
-    // 点击遮罩层关闭弹窗
-    detailModal.addEventListener('click', (e) => {
+      // --- 弹窗逻辑 ---
+      closeModalBtn.addEventListener('click', () => {
+        detailModal.style.display = 'none'
+      })
+      detailModal.addEventListener('click', (e) => {
         if (e.target === detailModal) {
-            detailModal.style.display = 'none';
+          detailModal.style.display = 'none'
         }
-    });
+      })
 
-    /**
-     * 打开详情弹窗并渲染当前行数据
-     */
-    function showRowDetails(row) {
-        modalBody.innerHTML = ''; // 清空之前的内容
+      function showRowDetails(row) {
+        modalBody.innerHTML = ''
 
-        globalColumns.forEach(col => {
-            const val = row[col];
-            const text = formatCell(val);
+        globalColumns.forEach((col) => {
+          const val = row[col]
+          const text = formatCell(val)
 
-            const rowDiv = document.createElement('div');
-            rowDiv.className = 'form-row';
+          const rowDiv = document.createElement('div')
+          rowDiv.className = 'form-row'
 
-            const labelDiv = document.createElement('div');
-            labelDiv.className = 'form-label';
-            labelDiv.textContent = col;
+          const labelDiv = document.createElement('div')
+          labelDiv.className = 'form-label'
+          labelDiv.textContent = col
 
-            const valueDiv = document.createElement('div');
-            valueDiv.className = 'form-value';
-            valueDiv.textContent = text;
-            
-            // 对 null/undefined 弱化显示
-            if (val === null || val === undefined) {
-                valueDiv.style.color = '#9ca3af';
-                valueDiv.style.fontStyle = 'italic';
-            }
+          const valueDiv = document.createElement('div')
+          valueDiv.className = 'form-value'
+          valueDiv.textContent = text
 
-            rowDiv.appendChild(labelDiv);
-            rowDiv.appendChild(valueDiv);
-            modalBody.appendChild(rowDiv);
-        });
+          if (val === null || val === undefined) {
+            valueDiv.style.color = 'var(--text-placeholder)'
+            valueDiv.style.fontStyle = 'italic'
+          }
 
-        detailModal.style.display = 'flex'; // 显示弹窗
-    }
+          rowDiv.appendChild(labelDiv)
+          rowDiv.appendChild(valueDiv)
+          modalBody.appendChild(rowDiv)
+        })
 
-    // --- 文件读取逻辑 ---
-    fileInput.addEventListener('change', async (event) => {
-        const file = event.target.files[0];
-        if (!file) return;
+        detailModal.style.display = 'flex'
+      }
 
-        // 状态重置
-        searchInput.disabled = true;
-        searchInput.value = '';
-        searchStatus.textContent = '';
-        status.style.color = '#2563eb';
-        status.textContent = `⏳ 正在分析和提取 ${file.name} 的数据...`;
-        tableHead.innerHTML = '';
-        tableBody.innerHTML = '';
-        globalData =[];
+      // --- 文件读取逻辑 ---
+      fileInput.addEventListener('change', async (event) => {
+        const file = event.target.files[0]
+        if (!file) return
+
+        searchInput.disabled = true
+        searchInput.value = ''
+        searchStatus.textContent = ''
+        status.style.color = 'var(--status-info)'
+        status.textContent = `⏳ 正在分析和提取 ${file.name} 的数据...`
+        tableHead.innerHTML = ''
+        tableBody.innerHTML = ''
+        globalData = []
 
         try {
-            const fileAsyncBuffer = {
-                byteLength: file.size,
-                slice: async (start, end) => {
-                    const sliced = end !== undefined ? file.slice(start, end) : file.slice(start);
-                    return await sliced.arrayBuffer();
-                }
-            };
+          const fileAsyncBuffer = {
+            byteLength: file.size,
+            slice: async (start, end) => {
+              const sliced =
+                end !== undefined ? file.slice(start, end) : file.slice(start)
+              return await sliced.arrayBuffer()
+            },
+          }
 
-            const startTime = performance.now();
-            
-            // 默认加载前 1000 行用于预览和搜索
-            const PREVIEW_ROWS = 1000; 
-            const data = await parquetReadObjects({ 
-                file: fileAsyncBuffer, 
-                rowEnd: PREVIEW_ROWS,
-                compressors 
-            });
+          const startTime = performance.now()
 
-            const costTime = (performance.now() - startTime).toFixed(2);
+          const PREVIEW_ROWS = 1000
+          const data = await parquetReadObjects({
+            file: fileAsyncBuffer,
+            rowEnd: PREVIEW_ROWS,
+            compressors,
+          })
 
-            if (!data || data.length === 0) {
-                status.style.color = '#d97706';
-                status.textContent = '文件为空或不包含任何行';
-                return;
-            }
+          const costTime = (performance.now() - startTime).toFixed(2)
 
-            // 保存到全局供搜索使用
-            globalData = data;
-            globalColumns = Object.keys(data[0]);
+          if (!data || data.length === 0) {
+            status.style.color = 'var(--status-warning)'
+            status.textContent = '文件为空或不包含任何行'
+            return
+          }
 
-            // 渲染全量预览数据
-            renderTable(globalData);
+          globalData = data
+          globalColumns = Object.keys(data[0])
 
-            status.style.color = '#16a34a';
-            status.textContent = `✅ 提取成功！耗时 ${costTime}ms，共加载前 ${data.length} 行数据。`;
-            
-            // 启用搜索框
-            searchInput.disabled = false;
-            searchInput.focus();
+          renderTable(globalData)
 
+          status.style.color = 'var(--status-success)'
+          status.textContent = `✅ 提取成功！耗时 ${costTime}ms，共加载前 ${data.length} 行数据。`
+
+          searchInput.disabled = false
+          searchInput.focus()
         } catch (err) {
-            console.error(err);
-            status.style.color = '#dc2626';
-            status.textContent = `❌ 读取失败: ${err.message}`;
+          console.error(err)
+          status.style.color = 'var(--status-error)'
+          status.textContent = `❌ 读取失败：${err.message}`
         }
-    });
+      })
 
-    // 防抖计时器
-    let searchTimeout = null;
+      let searchTimeout = null
 
-    // 搜索输入监听 (多关键词 | 隔开)
-    searchInput.addEventListener('input', () => {
-        if (searchTimeout) clearTimeout(searchTimeout);
-        
+      searchInput.addEventListener('input', () => {
+        if (searchTimeout) clearTimeout(searchTimeout)
+
         searchTimeout = setTimeout(() => {
-            const query = searchInput.value.trim();
-            if (!query) {
-                renderTable(globalData);
-                searchStatus.textContent = '';
-                return;
-            }
+          const query = searchInput.value.trim()
+          if (!query) {
+            renderTable(globalData)
+            searchStatus.textContent = ''
+            return
+          }
 
-            // 解析用户输入的多个关键词，用 | 分割，转小写并过滤空词
-            const keywords = query.split('|')
-                                  .map(k => k.trim().toLowerCase())
-                                  .filter(k => k.length > 0);
-            
-            if (keywords.length === 0) {
-                renderTable(globalData);
-                searchStatus.textContent = '';
-                return;
-            }
+          const keywords = query
+            .split('|')
+            .map((k) => k.trim().toLowerCase())
+            .filter((k) => k.length > 0)
 
-            const startTime = performance.now();
+          if (keywords.length === 0) {
+            renderTable(globalData)
+            searchStatus.textContent = ''
+            return
+          }
 
-            // 过滤数据：只要当前行的任意列文本中包含 ANY（任意一个）关键词，则保留
-            const filteredData = globalData.filter(row => {
-                // 将整行数据转换为一个完整的字符串
-                const rowText = Object.values(row).map(val => formatCell(val)).join(' ').toLowerCase();
-                // 用 some 检查是否匹配任何一个关键字 (OR 逻辑)
-                return keywords.some(kw => rowText.includes(kw));
-            });
+          const startTime = performance.now()
 
-            const costTime = (performance.now() - startTime).toFixed(2);
-            renderTable(filteredData);
-            
-            searchStatus.textContent = `🔎 找到 ${filteredData.length} 条匹配结果 (耗时 ${costTime}ms)`;
-        }, 300); // 300ms 防抖延迟
-    });
+          const filteredData = globalData.filter((row) => {
+            const rowText = Object.values(row)
+              .map((val) => formatCell(val))
+              .join(' ')
+              .toLowerCase()
+            return keywords.some((kw) => rowText.includes(kw))
+          })
 
-    /**
-     * 将单元格内容格式化为安全的字符串
-     */
-    function formatCell(val) {
-        if (val === null || val === undefined) return 'null';
-        if (typeof val === 'bigint') return val.toString();
+          const costTime = (performance.now() - startTime).toFixed(2)
+          renderTable(filteredData)
+
+          searchStatus.textContent = `🔎 找到 ${filteredData.length} 条匹配结果 (耗时 ${costTime}ms)`
+        }, 300)
+      })
+
+      function formatCell(val) {
+        if (val === null || val === undefined) return 'null'
+        if (typeof val === 'bigint') return val.toString()
         if (typeof val === 'object') {
-            try {
-                return JSON.stringify(val, null, 2); // 弹窗需要格式化良好的 JSON
-            } catch (e) {
-                return String(val);
-            }
+          try {
+            return JSON.stringify(val, null, 2)
+          } catch (e) {
+            return String(val)
+          }
         }
-        return String(val);
-    }
+        return String(val)
+      }
 
-    /**
-     * 渲染表格 DOM
-     */
-    function renderTable(dataToRender) {
-        tableHead.innerHTML = '';
-        tableBody.innerHTML = '';
+      function renderTable(dataToRender) {
+        tableHead.innerHTML = ''
+        tableBody.innerHTML = ''
 
         if (dataToRender.length === 0) {
-            const tr = document.createElement('tr');
-            const td = document.createElement('td');
-            td.colSpan = globalColumns.length || 1;
-            td.textContent = '没有找到匹配的数据';
-            td.style.textAlign = 'center';
-            td.style.color = '#6b7280';
-            tableBody.appendChild(tr);
-            return;
+          const tr = document.createElement('tr')
+          const td = document.createElement('td')
+          td.colSpan = globalColumns.length || 1
+          td.textContent = '没有找到匹配的数据'
+          td.style.textAlign = 'center'
+          td.style.color = 'var(--text-muted)'
+          tableBody.appendChild(tr)
+          return
         }
 
-        // 1. 渲染表头
-        const trHead = document.createElement('tr');
-        globalColumns.forEach(col => {
-            const th = document.createElement('th');
-            th.title = col; // 鼠标移到表头上显示完整列名
-            th.textContent = col;
-            trHead.appendChild(th);
-        });
-        tableHead.appendChild(trHead);
+        const trHead = document.createElement('tr')
+        globalColumns.forEach((col) => {
+          const th = document.createElement('th')
+          th.title = col
+          th.textContent = col
+          trHead.appendChild(th)
+        })
+        tableHead.appendChild(trHead)
 
-        // 2. 渲染数据行
-        const fragment = document.createDocumentFragment();
-        dataToRender.forEach(row => {
-            const tr = document.createElement('tr');
-            
-            // 绑定点击事件打开弹窗
-            tr.addEventListener('click', () => showRowDetails(row));
+        const fragment = document.createDocumentFragment()
+        dataToRender.forEach((row) => {
+          const tr = document.createElement('tr')
 
-            globalColumns.forEach(col => {
-                const td = document.createElement('td');
-                const val = row[col];
-                
-                // 为了表格紧凑，如果是 object 就压缩成单行展示，如果是弹窗展开时，走上面的格式化
-                let text = '';
-                if (typeof val === 'object' && val !== null) {
-                    try { text = JSON.stringify(val); } catch(e) { text = String(val); }
-                } else {
-                    text = formatCell(val);
-                }
-                
-                td.textContent = text;
-                td.title = text; // hover 时原生显示一点长文本提示
+          tr.addEventListener('click', () => showRowDetails(row))
 
-                if (val === null || val === undefined) {
-                    td.style.color = '#9ca3af';
-                }
-                tr.appendChild(td);
-            });
-            fragment.appendChild(tr);
-        });
-        
-        tableBody.appendChild(fragment);
-    }
-</script>
-</body>
+          globalColumns.forEach((col) => {
+            const td = document.createElement('td')
+            const val = row[col]
+
+            let text = ''
+            if (typeof val === 'object' && val !== null) {
+              try {
+                text = JSON.stringify(val)
+              } catch (e) {
+                text = String(val)
+              }
+            } else {
+              text = formatCell(val)
+            }
+
+            td.textContent = text
+            td.title = text
+
+            if (val === null || val === undefined) {
+              td.style.color = 'var(--text-placeholder)'
+            }
+            tr.appendChild(td)
+          })
+          fragment.appendChild(tr)
+        })
+
+        tableBody.appendChild(fragment)
+      }
+    </script>
+  </body>
 </html>
