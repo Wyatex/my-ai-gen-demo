@@ -739,7 +739,6 @@
         }
 
         put(value) {
-          console.log('DOMTextStreamer-put', value)
           if (!this.first_put_done) {
             this.first_put_done = true
             this.startTime = performance.now()
@@ -753,7 +752,6 @@
 
         on_finalized_text(text, streamEnd) {
           this.generatedText += text
-          console.log('generatedText', this.generatedText, streamEnd)
           let tps = 0
           if (this.tokenCount > 0 && this.startTime) {
             const elapsed = (performance.now() - this.startTime) / 1000
@@ -1047,7 +1045,6 @@
         msgId = null,
         thinkText = null,
       ) {
-        console.log(text, thinkText)
         // 创建外层 Wrapper 用于控制整体左右对齐
         const wrapper = document.createElement('div')
         wrapper.className = `msg-wrapper wrapper-${role === 'assistant' ? 'assistant' : role}`
