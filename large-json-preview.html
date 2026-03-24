@@ -1,350 +1,558 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>超大 JSON 可视化 (虚拟列表版)</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>超大 JSON 可视化 (虚拟列表+搜索版)</title>
     <style>
-        :root {
-            --bg-color: #1e1e1e;
-            --text-color: #d4d4d4;
-            --key-color: #9cdcfe;
-            --string-color: #ce9178;
-            --number-color: #b5cea8;
-            --boolean-color: #569cd6;
-            --null-color: #c586c0;
-            --hover-bg: #2a2d2e;
-            --border-color: #444;
-        }
+      :root {
+        --bg-color: #1e1e1e;
+        --panel-bg: #252526;
+        --text-color: #d4d4d4;
+        --key-color: #9cdcfe;
+        --string-color: #ce9178;
+        --number-color: #b5cea8;
+        --boolean-color: #569cd6;
+        --null-color: #c586c0;
+        --hover-bg: #2a2d2e;
+        --border-color: #444;
+        --btn-bg: #0e639c;
+        --btn-hover: #1177bb;
+        --highlight-bg: #613214; /* 搜索命中的背景色 */
+      }
 
-        body {
-            margin: 0;
-            padding: 20px;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            font-family: Consolas, "Courier New", monospace;
-            height: 100vh;
-            box-sizing: border-box;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
+      body {
+        margin: 0;
+        padding: 20px;
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        font-family: Consolas, 'Courier New', monospace;
+        height: 100vh;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
 
-        .header {
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
+      .control-panel {
+        display: flex;
+        background-color: var(--panel-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        margin-bottom: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        flex-shrink: 0;
+      }
 
-        input[type="file"] {
-            color: white;
-        }
+      .panel-section {
+        flex: 1;
+        padding: 15px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
 
-        #loading {
-            color: #ffcc00;
-            font-weight: bold;
-            display: none;
-        }
+      .divider {
+        width: 1px;
+        background-color: var(--border-color);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
 
-        /* 虚拟列表容器 */
-        #viewport {
-            flex: 1;
-            overflow-y: auto;
-            position: relative;
-            border: 1px solid var(--border-color);
-            background: #1e1e1e;
-            border-radius: 4px;
-        }
+      .divider span {
+        background-color: var(--panel-bg);
+        padding: 10px 0;
+        color: #888;
+        font-size: 11px;
+      }
 
-        /* 撑开滚动条的高度占位层 */
-        #spacer {
-            width: 1px;
-        }
+      /* 搜索框样式 */
+      .search-container {
+        padding: 10px;
+        background-color: var(--panel-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
 
-        /* 实际渲染 DOM 的层 */
-        #content {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-        }
+      .search-input {
+        flex: 1;
+        background: var(--bg-color);
+        border: 1px solid var(--border-color);
+        color: var(--text-color);
+        padding: 8px 12px;
+        border-radius: 4px;
+        outline: none;
+      }
 
-        /* 单行节点样式 */
-        .tree-row {
-            height: 24px;
-            line-height: 24px;
-            display: flex;
-            align-items: center;
-            cursor: pointer;
-            white-space: nowrap;
-            user-select: none;
-        }
+      .search-input:focus {
+        border-color: var(--btn-bg);
+      }
 
-        .tree-row:hover {
-            background-color: var(--hover-bg);
-        }
+      .btn {
+        background-color: var(--btn-bg);
+        color: white;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 13px;
+        transition: background-color 0.2s;
+      }
 
-        .toggle-icon {
-            display: inline-block;
-            width: 20px;
-            text-align: center;
-            color: #888;
-            font-size: 12px;
-            transition: transform 0.1s;
-        }
+      .btn:hover {
+        background-color: var(--btn-hover);
+      }
 
-        .toggle-icon.expanded {
-            transform: rotate(90deg);
-        }
+      textarea {
+        height: 40px;
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        padding: 8px;
+        font-family: inherit;
+        resize: none;
+        scrollbar-width: none; /* Firefox */
+        -ms-overflow-style: none; /* IE/Edge */
+      }
+      textarea::-webkit-scrollbar {
+        display: none; /* Chrome/Safari/Webkit */
+      }
 
-        .toggle-icon.empty {
-            cursor: default;
-            visibility: hidden;
-        }
+      #loading {
+        color: #ffcc00;
+        margin-bottom: 5px;
+        font-size: 14px;
+        display: none;
+      }
 
-        /* 语法高亮 */
-        .json-key { color: var(--key-color); }
-        .json-string { color: var(--string-color); }
-        .json-number { color: var(--number-color); }
-        .json-boolean { color: var(--boolean-color); }
-        .json-null { color: var(--null-color); }
-        .json-summary { color: #888; font-style: italic; }
+      /* 虚拟列表 */
+      #viewport {
+        flex: 1;
+        overflow-y: auto;
+        position: relative;
+        border: 1px solid var(--border-color);
+        background: #1e1e1e;
+      }
+
+      #content {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+      }
+
+      .tree-row {
+        height: 24px;
+        line-height: 24px;
+        display: flex;
+        align-items: center;
+        cursor: pointer;
+        white-space: nowrap;
+        user-select: text;
+      }
+
+      .tree-row:hover {
+        background-color: var(--hover-bg);
+      }
+      .tree-row.matched {
+        background-color: var(--highlight-bg);
+      }
+
+      .toggle-icon {
+        display: inline-block;
+        width: 20px;
+        text-align: center;
+        color: #888;
+        font-size: 10px;
+      }
+
+      .toggle-icon.expanded {
+        transform: rotate(90deg);
+      }
+      .toggle-icon.empty {
+        visibility: hidden;
+      }
+
+      .json-key {
+        color: var(--key-color);
+      }
+      .json-string {
+        color: var(--string-color);
+      }
+      .json-number {
+        color: var(--number-color);
+      }
+      .json-boolean {
+        color: var(--boolean-color);
+      }
+      .json-null {
+        color: var(--null-color);
+      }
+      .json-summary {
+        color: #888;
+        font-style: italic;
+        font-size: 12px;
+      }
+
+      .match-count {
+        font-size: 12px;
+        color: #aaa;
+      }
     </style>
-</head>
-<body>
-
-    <div class="header">
-        <input type="file" id="fileInput" accept=".json" />
-        <div id="loading">正在读取和解析庞大的 JSON 数据，请稍候...</div>
+  </head>
+  <body>
+    <div class="control-panel">
+      <div class="panel-section">
+        <label class="btn" style="width: fit-content">
+          选择文件 <input type="file" id="fileInput" accept=".json" hidden
+        /></label>
+        <div id="fileName" style="font-size: 12px; color: #888">未选择文件</div>
+      </div>
+      <div class="divider"><span>OR</span></div>
+      <div class="panel-section">
+        <textarea id="jsonInput" placeholder="粘贴 JSON..."></textarea>
+        <button id="renderBtn" class="btn">解析文本</button>
+      </div>
     </div>
+
+    <div class="search-container">
+      <span style="font-size: 14px">🔍</span>
+      <input
+        type="text"
+        id="searchInput"
+        class="search-input"
+        placeholder="输入关键字搜索，支持多关键字用 | 分割 (例如: name|1001)"
+      />
+      <span id="matchInfo" class="match-count"></span>
+    </div>
+
+    <div id="loading">⏳ 处理中...</div>
 
     <div id="viewport">
-        <div id="spacer"></div>
-        <div id="content"></div>
+      <div id="spacer"></div>
+      <div id="content"></div>
     </div>
 
-<script>
-    // --- 配置与状态 ---
-    const ROW_HEIGHT = 24;      // 每行的高度
-    const BUFFER_SIZE = 10;     // 上下缓冲渲染行数
-    
-    let visibleList = [];       // 当前展开的扁平化节点列表
-    let viewportHeight = 0;     // 视口高度
+    <script>
+      const ROW_HEIGHT = 24
+      const BUFFER_SIZE = 15
 
-    // DOM 元素
-    const viewport = document.getElementById('viewport');
-    const spacer = document.getElementById('spacer');
-    const content = document.getElementById('content');
-    const fileInput = document.getElementById('fileInput');
-    const loading = document.getElementById('loading');
+      let rawData = null // 完整的原始数据
+      let visibleList = [] // 当前虚拟列表中展示的扁平化节点
+      let searchTimer = null // 防抖计时器
 
-    // --- 工具函数 ---
-    function escapeHtml(str) {
-        return String(str)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
-    }
+      const viewport = document.getElementById('viewport')
+      const spacer = document.getElementById('spacer')
+      const content = document.getElementById('content')
+      const loading = document.getElementById('loading')
+      const searchInput = document.getElementById('searchInput')
+      const matchInfo = document.getElementById('matchInfo')
 
-    function getType(val) {
-        if (val === null) return 'null';
-        if (Array.isArray(val)) return 'array';
-        return typeof val;
-    }
+      // --- 工具函数 ---
+      function getType(val) {
+        if (val === null) return 'null'
+        if (Array.isArray(val)) return 'array'
+        return typeof val
+      }
 
-    // --- 核心逻辑：生成子节点 ---
-    // 按需生成子节点，避免一次性递归整个 50MB JSON
-    function generateChildren(data, depth) {
-        const children = [];
-        const isArray = Array.isArray(data);
-        
+      function escapeHtml(str) {
+        return String(str).replace(
+          /[&<>"']/g,
+          (m) =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#039;',
+            })[m],
+        )
+      }
+
+      // --- 核心逻辑：数据转换 ---
+      function generateChildren(data, depth) {
+        const children = []
+        const isArray = Array.isArray(data)
         for (const key in data) {
-            if (Object.prototype.hasOwnProperty.call(data, key)) {
-                const val = data[key];
-                const type = getType(val);
-                const hasChildren = (type === 'object' || type === 'array') && Object.keys(val).length > 0;
-                
-                let summary = '';
-                if (type === 'object') summary = `{ Object, ${Object.keys(val).length} keys }`;
-                else if (type === 'array') summary = `[ Array, ${val.length} items ]`;
-
-                children.push({
-                    key: isArray ? null : key, // 数组不显示 key
-                    value: val,
-                    type: type,
-                    depth: depth,
-                    isExpanded: false,
-                    hasChildren: hasChildren,
-                    summary: summary
-                });
-            }
+          const val = data[key]
+          const type = getType(val)
+          const hasChildren =
+            (type === 'object' || type === 'array') &&
+            Object.keys(val).length > 0
+          children.push({
+            key: isArray ? null : key,
+            value: val,
+            type: type,
+            depth: depth,
+            isExpanded: false,
+            hasChildren: hasChildren,
+            summary:
+              type === 'object'
+                ? `{ Object, ${Object.keys(val).length} keys }`
+                : type === 'array'
+                  ? `[ Array, ${val.length} items ]`
+                  : '',
+          })
         }
-        return children;
-    }
+        return children
+      }
 
-    // --- 交互：展开/折叠节点 ---
-    function toggleNode(index) {
-        const node = visibleList[index];
-        if (!node.hasChildren) return;
+      // --- 搜索过滤逻辑 ---
+      // 采用“保留匹配路径”策略：如果子节点匹配，父节点必须展示
+      function filterData(data, regex) {
+        let matchCount = 0
+
+        function traverse(obj, depth, keyName = 'Root') {
+          const type = getType(obj)
+          const keyString = String(keyName)
+          const valueString =
+            type !== 'object' && type !== 'array' ? String(obj) : ''
+
+          // 检查当前节点是否匹配
+          const isMatch =
+            regex.test(keyString) || (valueString && regex.test(valueString))
+          if (isMatch) matchCount++
+
+          if (type === 'object' || type === 'array') {
+            const children = []
+            const keys = Object.keys(obj)
+
+            for (const k of keys) {
+              const childResult = traverse(obj[k], depth + 1, k)
+              if (childResult) children.push(childResult)
+            }
+
+            // 如果自己匹配，或者有任何子节点匹配，则保留此节点
+            if (isMatch || children.length > 0) {
+              return {
+                key:
+                  keyName === 'Root'
+                    ? null
+                    : Array.isArray(obj)
+                      ? null
+                      : keyName,
+                value: obj,
+                type: type,
+                depth: depth,
+                isExpanded: true, // 搜索模式下默认展开
+                hasChildren: keys.length > 0,
+                summary:
+                  type === 'object'
+                    ? `{ ${keys.length} keys }`
+                    : `[ ${obj.length} items ]`,
+                isMatched: isMatch,
+                filteredChildren: children,
+              }
+            }
+          } else {
+            if (isMatch) {
+              return {
+                key: keyName,
+                value: obj,
+                type: type,
+                depth: depth,
+                isMatched: true,
+                hasChildren: false,
+              }
+            }
+          }
+          return null
+        }
+
+        const filteredTree = traverse(data, 0)
+
+        // 将过滤后的树拍扁供虚拟列表使用
+        const flatList = []
+        function flatten(node) {
+          if (!node) return
+          const { filteredChildren, ...rest } = node
+          flatList.push(rest)
+          if (filteredChildren) {
+            filteredChildren.forEach(flatten)
+          }
+        }
+        flatten(filteredTree)
+        return { list: flatList, count: matchCount }
+      }
+
+      // --- 渲染逻辑 ---
+      function updateScroll() {
+        const scrollTop = viewport.scrollTop
+        const vHeight = viewport.clientHeight || 800
+
+        spacer.style.height = `${visibleList.length * ROW_HEIGHT}px`
+
+        let start = Math.max(
+          0,
+          Math.floor(scrollTop / ROW_HEIGHT) - BUFFER_SIZE,
+        )
+        let end = Math.min(
+          visibleList.length,
+          Math.floor((scrollTop + vHeight) / ROW_HEIGHT) + BUFFER_SIZE,
+        )
+
+        content.style.transform = `translateY(${start * ROW_HEIGHT}px)`
+
+        let html = ''
+        for (let i = start; i < end; i++) {
+          const node = visibleList[i]
+          const iconClass = `toggle-icon ${!node.hasChildren ? 'empty' : node.isExpanded ? 'expanded' : ''}`
+          const matchedClass = node.isMatched ? 'matched' : ''
+
+          let valHtml = ''
+          if (node.type === 'object' || node.type === 'array') {
+            valHtml = `<span class="json-summary">${node.summary}</span>`
+          } else {
+            const cls = `json-${node.type}`
+            const displayVal =
+              node.type === 'string'
+                ? `"${escapeHtml(node.value)}"`
+                : node.value
+            valHtml = `<span class="${cls}">${displayVal}</span>`
+          }
+
+          html += `
+                <div class="tree-row ${matchedClass}" data-index="${i}" style="padding-left: ${node.depth * 20}px;">
+                    <span class="${iconClass}">▶</span>
+                    ${node.key ? `<span class="json-key">"${escapeHtml(node.key)}"</span>: ` : ''}
+                    ${valHtml}
+                </div>`
+        }
+        content.innerHTML = html
+      }
+
+      function handleSearch() {
+        const term = searchInput.value.trim()
+        if (!rawData) return
+
+        if (!term) {
+          matchInfo.textContent = ''
+          // 恢复初始状态：只显示根及其第一层子节点
+          initView(rawData)
+          return
+        }
+
+        try {
+          // 支持 | 分割关键字
+          const pattern = term
+            .split('|')
+            .filter((s) => s.trim())
+            .map((s) => s.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+            .join('|')
+          const regex = new RegExp(pattern, 'i')
+
+          loading.style.display = 'block'
+
+          // 延时执行防止 UI 冻结
+          setTimeout(() => {
+            const result = filterData(rawData, regex)
+            visibleList = result.list
+            matchInfo.textContent = `找到 ${result.count} 个匹配`
+            viewport.scrollTop = 0
+            updateScroll()
+            loading.style.display = 'none'
+          }, 10)
+        } catch (e) {
+          console.error('Regex error', e)
+        }
+      }
+
+      function initView(data) {
+        const rootType = getType(data)
+        visibleList = [
+          {
+            key: 'Root',
+            value: data,
+            type: rootType,
+            depth: 0,
+            isExpanded: true,
+            hasChildren: true,
+            summary:
+              rootType === 'object'
+                ? `{ ${Object.keys(data).length} keys }`
+                : `[ ${data.length} items ]`,
+          },
+        ]
+        visibleList.push(...generateChildren(data, 1))
+        updateScroll()
+      }
+
+      // --- 事件监听 ---
+      searchInput.addEventListener('input', () => {
+        clearTimeout(searchTimer)
+        searchTimer = setTimeout(handleSearch, 400) // 400ms 防抖
+      })
+
+      viewport.addEventListener('scroll', () =>
+        window.requestAnimationFrame(updateScroll),
+      )
+      window.addEventListener('resize', updateScroll)
+
+      content.addEventListener('click', (e) => {
+        // 搜索模式下点击折叠功能逻辑比较复杂（因为涉及路径完整性），
+        // 这里采用简单的折叠逻辑，如果用户正在搜索，点击将照常执行折叠
+        const row = e.target.closest('.tree-row')
+        if (!row) return
+        const index = parseInt(row.getAttribute('data-index'))
+        const node = visibleList[index]
+        if (!node.hasChildren) return
 
         if (node.isExpanded) {
-            // 折叠：查找并移除所有子孙节点
-            node.isExpanded = false;
-            let removeCount = 0;
-            for (let i = index + 1; i < visibleList.length; i++) {
-                if (visibleList[i].depth > node.depth) {
-                    removeCount++;
-                } else {
-                    break;
-                }
-            }
-            visibleList.splice(index + 1, removeCount);
+          node.isExpanded = false
+          let count = 0
+          for (let i = index + 1; i < visibleList.length; i++) {
+            if (visibleList[i].depth > node.depth) count++
+            else break
+          }
+          visibleList.splice(index + 1, count)
         } else {
-            // 展开：仅生成下一层级节点并插入
-            node.isExpanded = true;
-            const children = generateChildren(node.value, node.depth + 1);
-            visibleList.splice(index + 1, 0, ...children);
+          node.isExpanded = true
+          const children = generateChildren(node.value, node.depth + 1)
+          visibleList.splice(index + 1, 0, ...children)
         }
-        
-        updateScroll();
-    }
+        updateScroll()
+      })
 
-    // --- 渲染：虚拟列表核心 ---
-    function updateScroll() {
-        const scrollTop = viewport.scrollTop;
-        viewportHeight = viewport.clientHeight || 800;
-        
-        // 动态设置占位高度，撑开滚动条
-        spacer.style.height = `${visibleList.length * ROW_HEIGHT}px`;
+      // 文件上传/文本解析逻辑
+      const handleRawData = (data) => {
+        rawData = data
+        searchInput.value = ''
+        matchInfo.textContent = ''
+        initView(data)
+      }
 
-        // 计算当前可视范围的索引
-        let startIndex = Math.floor(scrollTop / ROW_HEIGHT) - BUFFER_SIZE;
-        let endIndex = Math.floor((scrollTop + viewportHeight) / ROW_HEIGHT) + BUFFER_SIZE;
-        
-        // 边界限制
-        startIndex = Math.max(0, startIndex);
-        endIndex = Math.min(visibleList.length, endIndex);
-
-        // 保持内容层跟随滚动位置
-        content.style.transform = `translateY(${startIndex * ROW_HEIGHT}px)`;
-
-        // 拼接可见区域的 HTML
-        let html = '';
-        for (let i = startIndex; i < endIndex; i++) {
-            const node = visibleList[i];
-            const paddingLeft = node.depth * 24;
-            
-            // 箭头图标
-            let iconClass = 'toggle-icon';
-            let iconText = '▶';
-            if (!node.hasChildren) {
-                iconClass += ' empty';
-                iconText = '';
-            } else if (node.isExpanded) {
-                iconClass += ' expanded';
-            }
-
-            // Key 的渲染
-            let keyHtml = node.key !== null ? `<span class="json-key">"${escapeHtml(node.key)}"</span>: ` : '';
-
-            // Value 的渲染
-            let valueHtml = '';
-            if (node.type === 'object' || node.type === 'array') {
-                valueHtml = `<span class="json-summary">${node.summary}</span>`;
-            } else if (node.type === 'string') {
-                valueHtml = `<span class="json-string">"${escapeHtml(node.value)}"</span>`;
-            } else if (node.type === 'number') {
-                valueHtml = `<span class="json-number">${node.value}</span>`;
-            } else if (node.type === 'boolean') {
-                valueHtml = `<span class="json-boolean">${node.value}</span>`;
-            } else if (node.type === 'null') {
-                valueHtml = `<span class="json-null">null</span>`;
-            }
-
-            html += `
-                <div class="tree-row" data-index="${i}" style="padding-left: ${paddingLeft}px;">
-                    <span class="${iconClass}">${iconText}</span>
-                    ${keyHtml}
-                    ${valueHtml}
-                </div>
-            `;
+      fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0]
+        if (!file) return
+        document.getElementById('fileName').textContent = file.name
+        loading.style.display = 'block'
+        const reader = new FileReader()
+        reader.onload = (ev) => {
+          try {
+            handleRawData(JSON.parse(ev.target.result))
+          } catch (err) {
+            alert('JSON解析失败')
+          }
+          loading.style.display = 'none'
         }
-        
-        content.innerHTML = html;
-    }
+        reader.readAsText(file)
+      })
 
-    // --- 事件监听 ---
-
-    // 监听滚动事件，触发重新渲染可视区
-    viewport.addEventListener('scroll', () => {
-        // 使用 requestAnimationFrame 优化滚动帧率
-        window.requestAnimationFrame(updateScroll);
-    });
-
-    // 监听窗口大小改变
-    window.addEventListener('resize', () => {
-        updateScroll();
-    });
-
-    // 事件代理：监听节点的点击
-    content.addEventListener('click', (e) => {
-        const row = e.target.closest('.tree-row');
-        if (row) {
-            const index = parseInt(row.getAttribute('data-index'), 10);
-            toggleNode(index);
+      document.getElementById('renderBtn').addEventListener('click', () => {
+        const txt = document.getElementById('jsonInput').value.trim()
+        if (!txt) return
+        try {
+          handleRawData(JSON.parse(txt))
+        } catch (err) {
+          alert('JSON解析失败')
         }
-    });
-
-    // 处理文件上传
-    fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        loading.style.display = 'block';
-        content.innerHTML = '';
-        spacer.style.height = '0px';
-
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            // 给浏览器留出渲染 "Loading" 字样的时间
-            setTimeout(() => {
-                try {
-                    const jsonString = event.target.result;
-                    const parsedData = JSON.parse(jsonString);
-                    
-                    // 初始化根节点
-                    const rootType = getType(parsedData);
-                    let summary = rootType === 'object' ? `{ Object, ${Object.keys(parsedData).length} keys }` : `[ Array, ${parsedData.length} items ]`;
-                    
-                    visibleList = [{
-                        key: 'JSON Root',
-                        value: parsedData,
-                        type: rootType,
-                        depth: 0,
-                        isExpanded: true,
-                        hasChildren: true,
-                        summary: summary
-                    }];
-
-                    // 默认展开第一层
-                    const children = generateChildren(parsedData, 1);
-                    visibleList.push(...children);
-
-                    updateScroll();
-                } catch (error) {
-                    alert('JSON 解析失败：不是有效的 JSON 文件。\n\n' + error.message);
-                } finally {
-                    loading.style.display = 'none';
-                }
-            }, 50);
-        };
-        
-        // 使用 text 方式读取，50MB 文件通常在零点几秒内读取完毕
-        reader.readAsText(file);
-    });
-</script>
-</body>
+      })
+    </script>
+  </body>
 </html>
