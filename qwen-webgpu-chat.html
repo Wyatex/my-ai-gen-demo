@@ -47,7 +47,7 @@
         flex-direction: column;
       }
       #sidebar-header {
-        padding: 13px 15px 12.5px 15px;
+        padding: 14px 15px 14px 15px;
         border-bottom: 1px solid var(--border);
       }
       #new-chat-btn {
@@ -145,17 +145,62 @@
         cursor: not-allowed;
       }
 
+      /* System Prompt Button */
+      #open-sys-prompt-btn {
+        padding: 8px 15px;
+        background: white;
+        color: #374151;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      #open-sys-prompt-btn:hover {
+        background: #f3f4f6;
+      }
+
       #chat-container {
         flex: 1;
         overflow-y: auto;
         padding: 20px;
         display: flex;
         flex-direction: column;
-        gap: 15px;
+        gap: 20px;
         background: white;
       }
-      .message {
+
+      /* Chat Bubble Wrappers */
+      .msg-wrapper {
+        display: flex;
+        flex-direction: column;
         max-width: 80%;
+      }
+      .wrapper-user {
+        align-self: flex-end;
+        align-items: flex-end;
+      }
+      .wrapper-assistant {
+        align-self: flex-start;
+        align-items: flex-start;
+      }
+      .wrapper-system {
+        align-self: flex-start;
+        align-items: flex-start;
+        max-width: 90%;
+      }
+
+      .role-label {
+        font-size: 12px;
+        color: #6b7280;
+        margin-bottom: 4px;
+        padding: 0 4px;
+      }
+
+      .message {
+        width: fit-content;
         padding: 12px 16px;
         border-radius: 8px;
         line-height: 1.5;
@@ -171,14 +216,19 @@
       .user-msg {
         background: var(--msg-user);
         color: white;
-        align-self: flex-end;
         border-bottom-right-radius: 0;
       }
       .ai-msg {
         background: var(--msg-ai);
         color: black;
-        align-self: flex-start;
         border-bottom-left-radius: 0;
+      }
+      .system-msg {
+        background: #fef3c7;
+        color: #92400e;
+        border: 1px solid #fcd34d;
+        font-size: 14px;
+        text-align: center;
       }
 
       /* Token Speed Stats */
@@ -191,7 +241,7 @@
       }
 
       /* =========================================
-         Markdown & 代码高亮样式
+         Markdown & 代码高亮样式 & 思考模式样式
       ========================================== */
       .markdown-body {
         font-size: 15px;
@@ -218,7 +268,6 @@
         padding: 2px 4px;
         border-radius: 4px;
       }
-      /* 用户消息里的代码底色适配深底色 */
       .user-msg .markdown-body code {
         background: rgba(255, 255, 255, 0.2);
         color: white;
@@ -240,6 +289,97 @@
       }
       .markdown-body a:hover {
         text-decoration: underline;
+      }
+
+      /* ================= 思考过程模块样式 ================= */
+      .think-box {
+        margin-bottom: 12px;
+        /* 使用 rgba 让边框和背景能融入所在气泡的底色 */
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.4);
+        overflow: hidden;
+      }
+
+      .think-header {
+        display: flex;
+        align-items: center;
+        padding: 8px 12px;
+        cursor: pointer;
+        font-size: 13px;
+        color: #52525b; /* 更柔和的暗灰色 */
+        font-weight: 500;
+        user-select: none;
+        transition: background 0.2s ease;
+      }
+
+      .think-header:hover {
+        background: rgba(0, 0, 0, 0.04);
+      }
+
+      .think-icon {
+        margin-right: 6px;
+        font-size: 14px;
+        /* 让图标稍微带点呼吸感或者静止都行 */
+        opacity: 0.8;
+      }
+
+      .think-title {
+        flex: 1; /* 撑开中间，把箭头挤到最右边 */
+      }
+
+      .think-chevron {
+        width: 14px;
+        height: 14px;
+        color: #a1a1aa;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      /* 展开时的箭头旋转动画 */
+      .think-box.open .think-chevron {
+        transform: rotate(180deg);
+      }
+
+      /* 高度动画的核心：使用 Grid 的 0fr 到 1fr 过渡 */
+      .think-content-wrapper {
+        display: grid;
+        grid-template-rows: 0fr;
+        transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .think-box.open .think-content-wrapper {
+        grid-template-rows: 1fr;
+      }
+
+      .think-content {
+        min-height: 0; /* 必须加这个，Grid 动画才能生效 */
+        overflow: hidden;
+        /* 初始状态下不给上下 padding，防止撑开多余高度 */
+        padding: 0 12px;
+        font-size: 14px;
+        color: #4b5563;
+        border-top: 1px solid transparent;
+        opacity: 0;
+        transition:
+          padding 0.3s ease,
+          opacity 0.3s ease,
+          border-color 0.3s ease;
+      }
+
+      /* 展开后的内容样式 */
+      .think-box.open .think-content {
+        padding: 10px 12px;
+        border-top-color: rgba(0, 0, 0, 0.08);
+        opacity: 1;
+      }
+
+      /* 可选：调整思考内容里的 Markdown 样式，让它比正文稍微弱化一点 */
+      .think-content p {
+        margin: 0 0 8px 0;
+        line-height: 1.6;
+      }
+      .think-content p:last-child {
+        margin-bottom: 0;
       }
 
       /* Input Area */
@@ -321,17 +461,16 @@
         cursor: not-allowed;
       }
 
-      /* Loading Modal */
-      #loading-modal {
-        position: absolute;
+      /* Modals */
+      .modal-overlay {
+        position: fixed;
         top: 0;
         left: 0;
         right: 0;
         bottom: 0;
-        background: rgba(255, 255, 255, 0.9);
+        background: rgba(0, 0, 0, 0.4);
         z-index: 100;
         display: none;
-        flex-direction: column;
         justify-content: center;
         align-items: center;
       }
@@ -342,6 +481,45 @@
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
         width: 400px;
         text-align: center;
+      }
+      .sys-modal-box {
+        background: white;
+        padding: 25px;
+        border-radius: 10px;
+        width: 500px;
+        max-width: 90%;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+      }
+      .sys-modal-box textarea {
+        padding: 10px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-family: inherit;
+        font-size: 14px;
+        resize: vertical;
+      }
+      .modal-btns {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+      .btn-cancel {
+        padding: 8px 15px;
+        border: 1px solid var(--border);
+        background: white;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      .btn-save {
+        padding: 8px 15px;
+        border: none;
+        background: var(--primary);
+        color: white;
+        border-radius: 6px;
+        cursor: pointer;
       }
       #progress-text {
         margin-bottom: 15px;
@@ -362,6 +540,54 @@
         background-color: var(--primary);
         border-radius: 5px;
       }
+
+      /* switch开关样式 */
+      /* 隐藏原生的丑陋复选框 */
+      .custom-switch input {
+        display: none;
+      }
+      /* 整体容器样式 */
+      .custom-switch {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px; /* 文本与开关的间距 */
+        font-size: 14px;
+        cursor: pointer;
+        user-select: none; /* 防止频繁点击时误选中文字 */
+        color: #333; /* 文字颜色 */
+      }
+      /* 滑动轨道 */
+      .switch-track {
+        position: relative;
+        width: 40px; /* 开关宽度 */
+        height: 22px; /* 开关高度 */
+        background-color: #dcdfe6; /* 未选中时的灰色背景 */
+        border-radius: 22px;
+        transition: background-color 0.3s ease;
+      }
+      /* 滑块上的圆球 */
+      .switch-track::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 18px; /* 圆球宽度 */
+        height: 18px; /* 圆球高度 */
+        background-color: #fff;
+        border-radius: 50%;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); /* 给圆球加点立体阴影 */
+        transition: transform 0.3s ease;
+      }
+      /* 当 input 被选中时，改变轨道背景色 */
+      .custom-switch input:checked + .switch-track {
+        background-color: #007aff; /* 开启时的颜色（科技蓝），也可改为微信绿 #07c160 */
+      }
+      /* 当 input 被选中时，圆球向右平移 */
+      .custom-switch input:checked + .switch-track::after {
+        transform: translateX(
+          18px
+        ); /* 移动距离 = 轨道宽度40 - 圆球宽度18 - 左右间距4 */
+      }
     </style>
   </head>
   <body>
@@ -378,6 +604,14 @@
       <div id="header">
         <h3>Qwen WebGPU Chat</h3>
         <div id="model-controls">
+          <button id="open-sys-prompt-btn" title="设置系统提示词">
+            ⚙️ 系统提示词
+          </button>
+          <label class="custom-switch">
+            <input type="checkbox" id="think-mode-switch" />
+            <div class="switch-track"></div>
+            <span>思考模式</span>
+          </label>
           <select id="model-select">
             <option value="huggingworld/Qwen3.5-0.8B-ONNX">
               Qwen3.5-0.8B-ONNX
@@ -427,7 +661,11 @@
       </div>
 
       <!-- 模型加载进度弹窗 -->
-      <div id="loading-modal">
+      <div
+        id="loading-modal"
+        class="modal-overlay"
+        style="background: rgba(255, 255, 255, 0.9)"
+      >
         <div class="modal-box">
           <h3 style="margin-bottom: 15px">加载模型中</h3>
           <div id="progress-text">正在初始化...</div>
@@ -435,6 +673,32 @@
           <p style="margin-top: 15px; font-size: 12px; color: #6b7280">
             首次加载会自动下载模型文件，请耐心等待。
           </p>
+        </div>
+      </div>
+
+      <!-- 系统提示词设置弹窗 -->
+      <div id="sys-prompt-modal" class="modal-overlay">
+        <div class="sys-modal-box">
+          <h3 style="margin-bottom: 5px">全局系统提示词</h3>
+          <p
+            style="
+              font-size: 13px;
+              color: #6b7280;
+              margin-top: 0;
+              margin-bottom: 5px;
+            "
+          >
+            设定的提示词将应用于新对话中。留空则不使用系统提示词。
+          </p>
+          <textarea
+            id="sys-prompt-input"
+            rows="5"
+            placeholder="例如：你是一个有用的AI助手，请用简短幽默的语气回答..."
+          ></textarea>
+          <div class="modal-btns">
+            <button id="sys-prompt-cancel" class="btn-cancel">取消</button>
+            <button id="sys-prompt-save" class="btn-save">保存</button>
+          </div>
         </div>
       </div>
     </div>
@@ -458,18 +722,16 @@
               return hljs.highlight(str, { language: lang }).value
             } catch (__) {}
           }
-          return '' // 使用默认转义
+          return ''
         },
       })
 
-      // ============== 自定义 Streamer 以实时更新 UI 并计算速度 ==============
+      // ============== 自定义 Streamer =====================
       class DOMTextStreamer extends TextStreamer {
         constructor(tokenizer, callback) {
           super(tokenizer, { skip_prompt: true, skip_special_tokens: true })
           this.callback = callback
           this.generatedText = ''
-
-          // 用于速度统计的变量
           this.tokenCount = 0
           this.startTime = null
           this.first_put_done = false
@@ -477,13 +739,11 @@
         }
 
         put(value) {
-          // 第一次 put 通常包含 Prompt 或者是生成前的准备
+          console.log('DOMTextStreamer-put', value)
           if (!this.first_put_done) {
             this.first_put_done = true
-            // 以处理完 Prompt 后的时间为起点，这样算出来的是纯 Decode 速度
             this.startTime = performance.now()
           } else {
-            // 后续每次 put 记录新生成的 token 数
             let count =
               value.size !== undefined ? value.size : value.length || 1
             this.tokenCount += count
@@ -493,20 +753,18 @@
 
         on_finalized_text(text, streamEnd) {
           this.generatedText += text
-
-          // 计算当前速度 (Tokens/s)
+          console.log('generatedText', this.generatedText, streamEnd)
           let tps = 0
           if (this.tokenCount > 0 && this.startTime) {
             const elapsed = (performance.now() - this.startTime) / 1000
             if (elapsed > 0) tps = (this.tokenCount / elapsed).toFixed(2)
           }
           this.finalTps = tps
-
           this.callback(this.generatedText, streamEnd, tps)
         }
       }
 
-      // ============== IndexedDB 封装 ==============
+      // ============== IndexedDB 封装 =====================
       const DB_NAME = 'QwenChatDB'
       const STORE_NAME = 'chats'
       let db
@@ -552,7 +810,7 @@
         })
       }
 
-      // ============== 全局状态 ==============
+      // ============== 全局状态 =====================
       let currentChatId = null
       let chatHistory = []
       let processor = null
@@ -560,7 +818,10 @@
       let isLoading = false
       let currentImageBase64 = null
 
-      // ============== UI 元素 ==============
+      // 加载本地系统提示词
+      let globalSystemPrompt = localStorage.getItem('systemPrompt') || ''
+
+      // ============== UI 元素 =====================
       const chatListEl = document.getElementById('chat-list')
       const chatContainerEl = document.getElementById('chat-container')
       const textInput = document.getElementById('text-input')
@@ -578,14 +839,49 @@
       const progressBar = document.getElementById('progress-bar')
       const progressText = document.getElementById('progress-text')
 
-      // ============== 初始化流程 ==============
+      const sysPromptModal = document.getElementById('sys-prompt-modal')
+      const sysPromptInput = document.getElementById('sys-prompt-input')
+      const openSysPromptBtn = document.getElementById('open-sys-prompt-btn')
+      const sysPromptCancel = document.getElementById('sys-prompt-cancel')
+      const sysPromptSave = document.getElementById('sys-prompt-save')
+
+      // ============== 初始化流程 =====================
       async function init() {
         await initDB()
         await loadSidebar()
         createNewChat()
       }
 
-      // ============== 侧边栏与历史管理 ==============
+      // ============== 系统提示词设置逻辑 =================
+      openSysPromptBtn.onclick = () => {
+        sysPromptInput.value = globalSystemPrompt
+        sysPromptModal.style.display = 'flex'
+      }
+
+      sysPromptCancel.onclick = () => {
+        sysPromptModal.style.display = 'none'
+      }
+
+      sysPromptSave.onclick = () => {
+        globalSystemPrompt = sysPromptInput.value.trim()
+        localStorage.setItem('systemPrompt', globalSystemPrompt)
+        sysPromptModal.style.display = 'none'
+
+        // 如果当前是空对话，直接重建以便立刻应用新的系统提示词
+        const userMsgs = chatHistory.filter((m) => m.role === 'user')
+        if (userMsgs.length === 0) {
+          createNewChat()
+        }
+      }
+
+      // 点击外部关闭弹窗
+      sysPromptModal.addEventListener('click', (e) => {
+        if (e.target === sysPromptModal) {
+          sysPromptModal.style.display = 'none'
+        }
+      })
+
+      // ============== 侧边栏与历史管理 =================
       async function loadSidebar() {
         const chats = await getAllChats()
         chats.sort((a, b) => b.id - a.id)
@@ -620,6 +916,13 @@
         currentChatId = Date.now()
         chatHistory = []
         chatContainerEl.innerHTML = ''
+
+        // 自动注入全局系统提示词
+        if (globalSystemPrompt) {
+          chatHistory.push({ role: 'system', text: globalSystemPrompt })
+          appendMessageUI('system', globalSystemPrompt)
+        }
+
         loadSidebar()
       }
 
@@ -628,12 +931,13 @@
         chatHistory = chat.messages || []
         chatContainerEl.innerHTML = ''
 
-        // 重新加载历史时也要显示之前记录的速度，并进行 Markdown 解析
         chatHistory.forEach((msg) => {
           const { contentDiv, statsDiv } = appendMessageUI(
             msg.role,
             msg.text,
             msg.image,
+            null,
+            msg.think, // 加载历史时如果有思考内容则传入
           )
           if (msg.tps && statsDiv) {
             statsDiv.innerText = `⚡ 速度: ${msg.tps} tokens/s`
@@ -646,7 +950,7 @@
         .getElementById('new-chat-btn')
         .addEventListener('click', createNewChat)
 
-      // ============== 图片上传预览 ==============
+      // ============== 图片上传预览 =================
       attachBtn.onclick = () => fileInput.click()
 
       fileInput.onchange = (e) => {
@@ -668,7 +972,7 @@
         previewImg.src = ''
       }
 
-      // ============== 加载模型 ==============
+      // ============== 加载模型 =====================
       loadModelBtn.onclick = async () => {
         if (isLoading) return
         const model_id = modelSelect.value
@@ -735,10 +1039,33 @@
         }
       }
 
-      // ============== 消息 UI 处理 (引入 Markdown) ==============
-      function appendMessageUI(role, text, imageBase64 = null, msgId = null) {
+      // ============== 消息 UI 处理 (支持解析思考过程) ==============
+      function appendMessageUI(
+        role,
+        text,
+        imageBase64 = null,
+        msgId = null,
+        thinkText = null,
+      ) {
+        console.log(text, thinkText)
+        // 创建外层 Wrapper 用于控制整体左右对齐
+        const wrapper = document.createElement('div')
+        wrapper.className = `msg-wrapper wrapper-${role === 'assistant' ? 'assistant' : role}`
+
+        // 顶部的角色 Label
+        const roleMap = {
+          user: '👨‍💻 用户',
+          assistant: '🤖 AI 助手',
+          system: '⚙️ 系统提示词',
+        }
+        const roleLabel = document.createElement('div')
+        roleLabel.className = 'role-label'
+        roleLabel.innerText = roleMap[role] || role
+        wrapper.appendChild(roleLabel)
+
+        // 中间的气泡
         const msgDiv = document.createElement('div')
-        msgDiv.className = `message ${role === 'user' ? 'user-msg' : 'ai-msg'}`
+        msgDiv.className = `message ${role === 'user' ? 'user-msg' : role === 'system' ? 'system-msg' : 'ai-msg'}`
         if (msgId) msgDiv.id = msgId
 
         if (imageBase64) {
@@ -750,24 +1077,46 @@
         const contentDiv = document.createElement('div')
         contentDiv.className = 'markdown-body'
 
-        // 用户消息使用普通纯文本显示，防止注入。AI 消息使用 Markdown 解析
         if (role === 'user') {
           contentDiv.innerText = text
-        } else {
+        } else if (role === 'system') {
           contentDiv.innerHTML = md.render(text || '')
+        } else {
+          // AI Assistant
+          let innerHtml = ''
+          // 如果有历史保存的思考内容，渲染进折叠框中
+          if (thinkText) {
+            innerHtml += `
+              <div class="think-box">
+                <div class="think-header" onclick="this.parentElement.classList.toggle('open')">
+                  <span class="think-icon">💡</span>
+                  <span class="think-title">思考过程</span>
+                  <svg class="think-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="think-content-wrapper">
+                  <div class="think-content">${md.render(thinkText)}</div>
+                </div>
+              </div>
+            `
+          }
+          if (text) {
+            innerHtml += md.render(text)
+          }
+          contentDiv.innerHTML = innerHtml || text || ''
         }
 
         msgDiv.appendChild(contentDiv)
+        wrapper.appendChild(msgDiv)
 
-        // 如果是 AI 回复，添加一个显示速度的专属容器
+        // 底部的统计数据
         let statsDiv = null
         if (role === 'assistant') {
           statsDiv = document.createElement('div')
           statsDiv.className = 'msg-stats'
-          msgDiv.appendChild(statsDiv)
+          wrapper.appendChild(statsDiv)
         }
 
-        chatContainerEl.appendChild(msgDiv)
+        chatContainerEl.appendChild(wrapper)
         chatContainerEl.scrollTop = chatContainerEl.scrollHeight
 
         return { contentDiv, statsDiv }
@@ -807,12 +1156,17 @@
             appendMessageUI('assistant', '思考中...', null, aiMsgId)
 
           try {
-            // 1. 整理对话格式（适配 apply_chat_template）
+            // 1. 整理对话格式 (仅将实际内容带入下次生成，过滤掉思考记录)
             const conversation = []
             const rawImages = []
 
             for (let msg of chatHistory) {
-              if (msg.role === 'user') {
+              if (msg.role === 'system') {
+                conversation.push({
+                  role: 'system',
+                  content: [{ type: 'text', text: msg.text }],
+                })
+              } else if (msg.role === 'user') {
                 const content = []
                 if (msg.image) {
                   content.push({ type: 'image' })
@@ -822,7 +1176,8 @@
                 }
                 content.push({ type: 'text', text: msg.text || '' })
                 conversation.push({ role: 'user', content: content })
-              } else {
+              } else if (msg.role === 'assistant') {
+                // 注意这里只传入了 msg.text (不包含 msg.think)，满足“思考内容不传给下一次对话”的需求
                 conversation.push({
                   role: 'assistant',
                   content: [{ type: 'text', text: msg.text }],
@@ -833,6 +1188,8 @@
             // 2. 调用 Processor
             const promptText = processor.apply_chat_template(conversation, {
               add_generation_prompt: true,
+              enable_thinking:
+                document.getElementById('think-mode-switch').checked,
             })
 
             let inputs
@@ -845,14 +1202,95 @@
               inputs = await processor(promptText)
             }
 
-            // 3. 构建 Streamer 来动态更新网页及显示速度 (应用 Markdown 渲染)
-            aiContentDiv.innerHTML = ''
+            // 3. 构建 Streamer 动态渲染更新（修复了闪烁、无法点击折叠的问题）
+            let firstTokenReceived = false
 
             const streamer = new DOMTextStreamer(
               processor.tokenizer,
               (newText, isEnd, tps) => {
-                // 实时渲染 Markdown 内容
-                aiContentDiv.innerHTML = md.render(newText)
+                // 如果是起初的空 token 则不覆盖，保护“思考中...”占位符
+                if (!firstTokenReceived && newText.trim().length === 0) {
+                  return
+                }
+
+                // 收到第一个有效 Token 时，清空“思考中...”占位符
+                if (!firstTokenReceived) {
+                  aiContentDiv.innerHTML = ''
+                  firstTokenReceived = true
+                }
+
+                let parsedThink = ''
+                let parsedText = newText
+                const thinkEnabled =
+                  document.getElementById('think-mode-switch').checked
+
+                // 如果开启了思考模式，进行解析
+                if (thinkEnabled) {
+                  if (newText.includes('</think>')) {
+                    const parts = newText.split('</think>')
+                    parsedThink = parts[0].replace(/^<think>\n?/, '')
+                    parsedText = parts
+                      .slice(1)
+                      .join('</think>')
+                      .replace(/^\n+/, '')
+                  } else {
+                    parsedThink = newText.replace(/^<think>\n?/, '')
+                    parsedText = ''
+                  }
+                }
+
+                // ==========================================
+                // 核心优化：局部更新 DOM 而不是全量替换 innerHTML
+                // ==========================================
+
+                // 1. 渲染思考过程部分
+                if (parsedThink) {
+                  let thinkBox = aiContentDiv.querySelector('.think-box')
+                  // 如果还没创建思考框，则初始化它的结构（仅执行一次）
+                  if (!thinkBox) {
+                    thinkBox = document.createElement('div')
+                    // 加上 open 类，默认生成时处于展开状态！
+                    thinkBox.className = 'think-box open'
+                    thinkBox.innerHTML = `
+                      <div class="think-header">
+                        <span class="think-icon">💡</span>
+                        <span class="think-title">思考过程</span>
+                        <svg class="think-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                      </div>
+                      <div class="think-content-wrapper">
+                        <div class="think-content"></div>
+                      </div>
+                    `
+                    // 绑定点击事件，由于节点不会被销毁，事件会一直生效
+                    thinkBox
+                      .querySelector('.think-header')
+                      .addEventListener('click', () => {
+                        thinkBox.classList.toggle('open')
+                      })
+                    aiContentDiv.appendChild(thinkBox)
+                  }
+
+                  // 仅更新思考框内部的内容区域
+                  const thinkContentDiv =
+                    thinkBox.querySelector('.think-content')
+                  thinkContentDiv.innerHTML = md.render(parsedThink)
+                }
+
+                // 2. 渲染正式回复内容部分
+                if (parsedText) {
+                  let textBox = aiContentDiv.querySelector('.ai-text')
+                  // 如果还没创建正文框，则初始化结构
+                  if (!textBox) {
+                    textBox = document.createElement('div')
+                    textBox.className = 'ai-text'
+                    aiContentDiv.appendChild(textBox)
+                  }
+
+                  // 仅更新正文内部的内容
+                  textBox.innerHTML = md.render(parsedText)
+                }
+
+                // 更新 Token 速度
                 if (tps > 0) {
                   aiStatsDiv.innerText = `⚡ 速度: ${tps} tokens/s`
                 }
@@ -861,16 +1299,33 @@
             )
 
             // 4. 开始生成
-            await model.generate({
+            const outputs = await model.generate({
               ...inputs,
-              max_new_tokens: 512,
+              max_new_tokens: 8192,
               streamer: streamer,
             })
 
-            // 5. 保存结果（务必保存原始 Markdown 文本，而不是 HTML）
+            // 5. 保存结果（按分离模式存储）
+            let finalThink = ''
+            let finalText = streamer.generatedText
+            const thinkEnabled =
+              document.getElementById('think-mode-switch').checked
+
+            if (thinkEnabled) {
+              if (finalText.includes('</think>')) {
+                const parts = finalText.split('</think>')
+                finalThink = parts[0].replace(/^<think>\n?/, '')
+                finalText = parts.slice(1).join('</think>').replace(/^\n+/, '')
+              } else {
+                finalThink = finalText.replace(/^<think>\n?/, '')
+                finalText = ''
+              }
+            }
+
             chatHistory.push({
               role: 'assistant',
-              text: streamer.generatedText,
+              text: finalText,
+              think: finalThink, // 将思考单独剥离保留，用于下一次查阅
               tps: streamer.finalTps,
             })
             updateDB()
@@ -893,11 +1348,11 @@
       })
 
       async function updateDB() {
-        // 自动用第一条消息作为标题
-        const title =
-          chatHistory.length > 0
-            ? chatHistory[0].text.substring(0, 15) || '图片对话'
-            : '新对话'
+        // 使用第一条"用户(user)"消息作为标题，若无则使用默认名称
+        const firstUserMsg = chatHistory.find((m) => m.role === 'user')
+        const title = firstUserMsg
+          ? firstUserMsg.text.substring(0, 15) || '图片对话'
+          : '新对话'
 
         await saveChat({
           id: currentChatId,
