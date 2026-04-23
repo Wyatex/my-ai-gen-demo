@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Qwen3.5-ONNX WebGPU Chat</title>
+    <title>Gemma4-ONNX WebGPU Chat</title>
 
     <!-- 引入 Markdown-it 和 Highlight.js 以支持代码高亮 -->
     <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>
@@ -779,7 +779,7 @@ Markdown & 代码高亮样式 & 思考模式样式
     <!-- 右侧主界面 -->
     <div id="main">
       <div id="header">
-        <h3>Qwen WebGPU Chat</h3>
+        <h3>Gemma4 WebGPU Chat</h3>
         <div id="model-controls">
           <button id="open-sys-prompt-btn" title="设置系统提示词">
             ⚙️ 系统提示词
@@ -790,14 +790,11 @@ Markdown & 代码高亮样式 & 思考模式样式
             <span>思考模式</span>
           </label>
           <select id="model-select">
-            <option value="huggingworld/Qwen3.5-0.8B-ONNX">
-              Qwen3.5-0.8B-ONNX
+            <option value="onnx-community/gemma-4-E2B-it-ONNX">
+              gemma-4-E2B
             </option>
-            <option value="huggingworld/Qwen3.5-2B-ONNX">
-              Qwen3.5-2B-ONNX
-            </option>
-            <option value="huggingworld/Qwen3.5-4B-ONNX">
-              Qwen3.5-4B-ONNX
+            <option value="onnx-community/gemma-4-E4B-it-ONNX">
+              gemma-4-E4B
             </option>
           </select>
           <button id="load-model-btn">加载模型</button>
@@ -813,7 +810,50 @@ Markdown & 代码高亮样式 & 思考模式样式
           <img id="preview-img" src="" alt="preview" />
           <button id="remove-img-btn">✕</button>
         </div>
+        <div
+          id="audio-preview-container"
+          style="
+            display: none;
+            margin-bottom: 10px;
+            position: relative;
+            width: max-content;
+          "
+        >
+          <audio
+            id="preview-audio"
+            controls
+            style="max-width: 280px; height: 36px; border-radius: 6px"
+          ></audio>
+          <button
+            id="remove-audio-btn"
+            style="
+              position: absolute;
+              top: -8px;
+              right: -8px;
+              background: #ef4444;
+              color: white;
+              border: none;
+              border-radius: 50%;
+              width: 20px;
+              height: 20px;
+              cursor: pointer;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 12px;
+            "
+          >
+            ✕
+          </button>
+        </div>
+
         <form id="input-form">
+          <input
+            type="file"
+            id="audio-file-input"
+            accept="audio/*"
+            style="display: none"
+          />
           <input
             type="file"
             id="file-input"
@@ -827,6 +867,14 @@ Markdown & 代码高亮样式 & 思考模式样式
             title="上传图片"
           >
             📷
+          </button>
+          <button
+            type="button"
+            class="icon-btn"
+            id="attach-audio-btn"
+            title="上传音频"
+          >
+            🎤
           </button>
           <textarea
             id="text-input"
@@ -879,10 +927,15 @@ Markdown & 代码高亮样式 & 思考模式样式
     <script type="module">
       import {
         AutoProcessor,
-        Qwen3_5ForConditionalGeneration,
+        Gemma4ForConditionalGeneration,
         RawImage,
+        read_audio,
         TextStreamer,
-      } from 'https://unpkg.com/@huggingface/transformers@4.0.0-next.8/dist/transformers.min.js'
+        env,
+      } from 'https://unpkg.com/@huggingface/transformers@4.2.0/dist/transformers.min.js'
+
+      // env.remoteHost = 'http://127.0.0.1:8080'
+      // env.remotePathTemplate = '{model}'
 
       // ============== 初始化 Markdown-it ==================
       const md = window.markdownit({
@@ -902,7 +955,7 @@ Markdown & 代码高亮样式 & 思考模式样式
       // ============== 自定义 Streamer =====================
       class DOMTextStreamer extends TextStreamer {
         constructor(tokenizer, callback) {
-          super(tokenizer, { skip_prompt: true, skip_special_tokens: true })
+          super(tokenizer, { skip_prompt: true, skip_special_tokens: false })
           this.callback = callback
           this.generatedText = ''
           this.tokenCount = 0
@@ -988,6 +1041,7 @@ Markdown & 代码高亮样式 & 思考模式样式
       let model = null
       let isLoading = false
       let currentImageBase64 = null
+      let currentAudioBase64 = null
 
       // 加载本地系统提示词
       let globalSystemPrompt = localStorage.getItem('systemPrompt') || ''
@@ -1005,6 +1059,14 @@ Markdown & 代码高亮样式 & 思考模式样式
       const previewContainer = document.getElementById('preview-container')
       const previewImg = document.getElementById('preview-img')
       const removeImgBtn = document.getElementById('remove-img-btn')
+
+      const attachAudioBtn = document.getElementById('attach-audio-btn')
+      const audioFileInput = document.getElementById('audio-file-input')
+      const audioPreviewContainer = document.getElementById(
+        'audio-preview-container',
+      )
+      const previewAudio = document.getElementById('preview-audio')
+      const removeAudioBtn = document.getElementById('remove-audio-btn')
 
       const loadingModal = document.getElementById('loading-modal')
       const progressBar = document.getElementById('progress-bar')
@@ -1109,6 +1171,7 @@ Markdown & 代码高亮样式 & 思考模式样式
             msg.image,
             null,
             msg.think, // 加载历史时如果有思考内容则传入
+            msg.audio, // 加载历史时如果有音频则传入
           )
           if (msg.tps && statsDiv) {
             statsDiv.innerText = `⚡ 速度: ${msg.tps} tokens/s`
@@ -1141,6 +1204,28 @@ Markdown & 代码高亮样式 & 思考模式样式
         currentImageBase64 = null
         previewContainer.style.display = 'none'
         previewImg.src = ''
+      }
+
+      // ====== 音频上传预览 ======
+      attachAudioBtn.onclick = () => audioFileInput.click()
+
+      audioFileInput.onchange = (e) => {
+        const file = e.target.files[0]
+        if (!file) return
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          currentAudioBase64 = event.target.result
+          previewAudio.src = currentAudioBase64
+          audioPreviewContainer.style.display = 'block'
+        }
+        reader.readAsDataURL(file)
+        audioFileInput.value = ''
+      }
+
+      removeAudioBtn.onclick = () => {
+        currentAudioBase64 = null
+        audioPreviewContainer.style.display = 'none'
+        previewAudio.src = ''
       }
 
       // ============== 加载模型 =====================
@@ -1181,11 +1266,12 @@ Markdown & 代码高亮样式 & 思考模式样式
             progress_callback: progressCallback,
           })
 
-          model = await Qwen3_5ForConditionalGeneration.from_pretrained(
+          model = await Gemma4ForConditionalGeneration.from_pretrained(
             model_id,
             {
               dtype: {
                 embed_tokens: 'q4',
+                audio_encoder: 'fp16',
                 vision_encoder: 'fp16',
                 decoder_model_merged: 'q4',
               },
@@ -1217,6 +1303,7 @@ Markdown & 代码高亮样式 & 思考模式样式
         imageBase64 = null,
         msgId = null,
         thinkText = null,
+        audioBase64 = null,
       ) {
         // 创建外层 Wrapper 用于控制整体左右对齐
         const wrapper = document.createElement('div')
@@ -1243,6 +1330,14 @@ Markdown & 代码高亮样式 & 思考模式样式
           img.src = imageBase64
           msgDiv.appendChild(img)
         }
+        if (audioBase64) {
+          const audioEl = document.createElement('audio')
+          audioEl.controls = true
+          audioEl.src = audioBase64
+          audioEl.style.cssText =
+            'max-width:280px; height:36px; border-radius:6px; margin-bottom:8px; display:block;'
+          msgDiv.appendChild(audioEl)
+        }
 
         const contentDiv = document.createElement('div')
         contentDiv.className = 'markdown-body'
@@ -1256,18 +1351,19 @@ Markdown & 代码高亮样式 & 思考模式样式
           let innerHtml = ''
           // 如果有历史保存的思考内容，渲染进折叠框中
           if (thinkText) {
+            thinkText = thinkText.replace(/^thought\n/, '')
             innerHtml += `
-              <div class="think-box">
-                <div class="think-header" onclick="this.parentElement.classList.toggle('open')">
-                  <span class="think-icon">💡</span>
-                  <span class="think-title">思考过程</span>
-                  <svg class="think-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                </div>
-                <div class="think-content-wrapper">
-                  <div class="think-content">${md.render(thinkText)}</div>
-                </div>
-              </div>
-            `
+                    <div class="think-box">
+                      <div class="think-header" onclick="this.parentElement.classList.toggle('open')">
+                        <span class="think-icon">💡</span>
+                        <span class="think-title">思考过程</span>
+                        <svg class="think-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                      </div>
+                      <div class="think-content-wrapper">
+                        <div class="think-content">${md.render(thinkText)}</div>
+                      </div>
+                    </div>
+                  `
           }
           if (text) {
             innerHtml += md.render(text)
@@ -1306,14 +1402,28 @@ Markdown & 代码高亮样式 & 思考模式样式
 
           const userText = text
           const userImg = currentImageBase64
+          const userAudio = currentAudioBase64
 
           // 清理输入框
           textInput.value = ''
           removeImgBtn.click()
+          removeAudioBtn.click()
 
           // 显示用户消息并保存
-          appendMessageUI('user', userText, userImg)
-          chatHistory.push({ role: 'user', text: userText, image: userImg })
+          appendMessageUI(
+            'user',
+            userText,
+            userImg,
+            `user-msg-${Date.now()}`,
+            null,
+            userAudio,
+          )
+          chatHistory.push({
+            role: 'user',
+            text: userText,
+            image: userImg,
+            audio: userAudio,
+          })
           updateDB()
 
           // 禁用输入
@@ -1329,6 +1439,7 @@ Markdown & 代码高亮样式 & 思考模式样式
             // 1. 整理对话格式 (仅将实际内容带入下次生成，过滤掉思考记录)
             const conversation = []
             const rawImages = []
+            const rawAudios = []
 
             for (let msg of chatHistory) {
               if (msg.role === 'system') {
@@ -1344,6 +1455,12 @@ Markdown & 代码高亮样式 & 思考模式样式
                   const resized = await rImg.resize(448, 448)
                   rawImages.push(resized)
                 }
+                if (msg.audio) {
+                  console.log(msg.audio)
+                  content.push({ type: 'audio' })
+                  const rAudio = await read_audio(msg.audio)
+                  rawAudios.push(rAudio)
+                }
                 content.push({ type: 'text', text: msg.text || '' })
                 conversation.push({ role: 'user', content: content })
               } else if (msg.role === 'assistant') {
@@ -1354,6 +1471,7 @@ Markdown & 代码高亮样式 & 思考模式样式
                 })
               }
             }
+            console.log('conversation', conversation)
 
             // 2. 调用 Processor
             const promptText = processor.apply_chat_template(conversation, {
@@ -1363,14 +1481,16 @@ Markdown & 代码高亮样式 & 思考模式样式
             })
 
             let inputs
-            if (rawImages.length > 0) {
-              inputs = await processor(
-                promptText,
-                rawImages.length === 1 ? rawImages[0] : rawImages,
-              )
-            } else {
-              inputs = await processor(promptText)
-            }
+            const processorArgs = [promptText]
+            processorArgs.push(rawImages[0] ? rawImages[0] : null)
+            processorArgs.push(rawAudios[0] ? rawAudios[0] : null)
+            processorArgs.push({
+              add_special_tokens: false,
+            })
+
+            console.log('processorArgs', processorArgs)
+
+            inputs = await processor(...processorArgs)
 
             // 3. 构建 Streamer 动态渲染更新（修复了闪烁、无法点击折叠的问题）
             let firstTokenReceived = false
@@ -1396,15 +1516,15 @@ Markdown & 代码高亮样式 & 思考模式样式
 
                 // 如果开启了思考模式，进行解析
                 if (thinkEnabled) {
-                  if (newText.includes('</think>')) {
-                    const parts = newText.split('</think>')
-                    parsedThink = parts[0].replace(/^<think>\n?/, '')
+                  if (newText.includes('<channel\|>')) {
+                    const parts = newText.split('<channel\|>')
+                    parsedThink = parts[0].replace(/^<\|channel>?/, '')
                     parsedText = parts
                       .slice(1)
-                      .join('</think>')
+                      .join('<channel\|>')
                       .replace(/^\n+/, '')
                   } else {
-                    parsedThink = newText.replace(/^<think>\n?/, '')
+                    parsedThink = newText.replace(/^<\|channel>?/, '')
                     parsedText = ''
                   }
                 }
@@ -1415,6 +1535,7 @@ Markdown & 代码高亮样式 & 思考模式样式
 
                 // 1. 渲染思考过程部分
                 if (parsedThink) {
+                  parsedThink = parsedThink.replace(/^thought\n/, '')
                   let thinkBox = aiContentDiv.querySelector('.think-box')
                   // 如果还没创建思考框，则初始化它的结构（仅执行一次）
                   if (!thinkBox) {
@@ -1422,15 +1543,15 @@ Markdown & 代码高亮样式 & 思考模式样式
                     // 加上 open 类，默认生成时处于展开状态！
                     thinkBox.className = 'think-box open'
                     thinkBox.innerHTML = `
-                      <div class="think-header">
-                        <span class="think-icon">💡</span>
-                        <span class="think-title">思考过程</span>
-                        <svg class="think-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                      </div>
-                      <div class="think-content-wrapper">
-                        <div class="think-content"></div>
-                      </div>
-                    `
+                            <div class="think-header">
+                              <span class="think-icon">💡</span>
+                              <span class="think-title">思考过程</span>
+                              <svg class="think-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </div>
+                            <div class="think-content-wrapper">
+                              <div class="think-content"></div>
+                            </div>
+                          `
                     // 绑定点击事件，由于节点不会被销毁，事件会一直生效
                     thinkBox
                       .querySelector('.think-header')
@@ -1448,6 +1569,7 @@ Markdown & 代码高亮样式 & 思考模式样式
 
                 // 2. 渲染正式回复内容部分
                 if (parsedText) {
+                  parsedText = parsedText.replaceAll(/<turn\|>/g, '')
                   let textBox = aiContentDiv.querySelector('.ai-text')
                   // 如果还没创建正文框，则初始化结构
                   if (!textBox) {
@@ -1471,6 +1593,7 @@ Markdown & 代码高亮样式 & 思考模式样式
             // 4. 开始生成
             const outputs = await model.generate({
               ...inputs,
+              do_sample: false,
               max_new_tokens: 1024,
               streamer: streamer,
             })
@@ -1482,12 +1605,15 @@ Markdown & 代码高亮样式 & 思考模式样式
               document.getElementById('think-mode-switch').checked
 
             if (thinkEnabled) {
-              if (finalText.includes('</think>')) {
-                const parts = finalText.split('</think>')
-                finalThink = parts[0].replace(/^<think>\n?/, '')
-                finalText = parts.slice(1).join('</think>').replace(/^\n+/, '')
+              if (finalText.includes('<channel\|>')) {
+                const parts = finalText.split('<channel\|>')
+                finalThink = parts[0].replace(/^<\|channel>?/, '')
+                finalText = parts
+                  .slice(1)
+                  .join('<channel\|>')
+                  .replace(/^\n+/, '')
               } else {
-                finalThink = finalText.replace(/^<think>\n?/, '')
+                finalThink = finalText.replace(/^<\|channel>?/, '')
                 finalText = ''
               }
             }
