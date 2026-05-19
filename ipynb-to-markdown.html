@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jupyter to Markdown 转换器</title>
+    
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 配置 Tailwind 启用 class 级别的暗黑模式 -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+        }
+    </script>
+    
+    <!-- 尽早执行主题检测，防止页面加载时闪烁 (FOUC) -->
+    <script>
+        if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    </script>
+
+    <!-- 引入 FontAwesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        /* 平滑主题过渡 */
+        body {
+            transition: background-color 0.5s ease, color 0.5s ease;
+        }
+
+        /* 隐藏滚动条但保留滚动功能 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        .dark ::-webkit-scrollbar-thumb {
+            background: #475569;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        .dark ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+        
+        textarea {
+            tab-size: 4;
+            font-family: 'Fira Code', 'Consolas', monospace;
+        }
+
+        /* 苹果毛玻璃质感UI - 浅色与深色适配 */
+        .glass {
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+            transition: background 0.5s ease, border-color 0.5s ease, box-shadow 0.5s ease;
+        }
+        
+        .dark .glass {
+            background: rgba(15, 23, 42, 0.65); /* 沉稳的深蓝灰底色 */
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        }
+
+        /* 悬浮按钮图标切换动画 */
+        .theme-icon-transition {
+            transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-indigo-50 via-white to-purple-50 dark:from-slate-900 dark:via-slate-800 dark:to-indigo-950 min-h-screen p-4 md:p-8 text-slate-800 dark:text-slate-200">
+
+    <!-- 主题切换悬浮按钮 -->
+    <button id="themeToggleBtn" class="fixed top-4 right-4 md:top-8 md:right-8 w-11 h-11 rounded-full glass flex justify-center items-center hover:scale-110 active:scale-95 transition-all duration-300 z-50 group">
+        <!-- 太阳图标 (暗色模式时显示) -->
+        <i id="iconSun" class="fa-solid fa-sun text-yellow-400 text-xl absolute opacity-0 scale-50 rotate-90 theme-icon-transition dark:opacity-100 dark:scale-100 dark:rotate-0 group-hover:text-yellow-300"></i>
+        <!-- 月亮图标 (浅色模式时显示) -->
+        <i id="iconMoon" class="fa-solid fa-moon text-indigo-500 text-xl absolute opacity-100 scale-100 rotate-0 theme-icon-transition dark:opacity-0 dark:scale-50 dark:-rotate-90 group-hover:text-indigo-600"></i>
+    </button>
+
+    <div class="max-w-7xl mx-auto space-y-6 pt-4">
+        <!-- 头部标题 -->
+        <div class="text-center space-y-3 mb-8">
+            <h1 class="text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 drop-shadow-sm pt-4 transition-colors duration-500">
+                <i class="fa-solid fa-book-journal-whills mr-2 text-blue-500 dark:text-blue-400"></i> Notebook 转换器
+            </h1>
+            <p class="text-gray-500 dark:text-gray-400 font-medium tracking-wide flex justify-center items-center gap-2 transition-colors duration-500">
+                基于 <code class="bg-indigo-100 dark:bg-indigo-900/50 px-2 py-1 rounded text-sm text-indigo-600 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-700/50 transition-colors duration-500">markitdown-ts</code> 的纯前端转换引擎
+            </p>
+        </div>
+
+        <!-- 主体左右分栏 -->
+        <div class="flex flex-col lg:flex-row gap-6 h-[75vh]">
+            
+            <!-- 左侧：输入区域 -->
+            <div class="flex-1 flex flex-col glass rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-xl dark:hover:shadow-2xl dark:hover:shadow-black/50">
+                <div class="bg-white/60 dark:bg-slate-800/60 px-5 py-3 border-b border-gray-200/50 dark:border-slate-700/50 flex justify-between items-center transition-colors duration-500">
+                    <span class="font-semibold text-gray-700 dark:text-gray-200 flex items-center">
+                        <i class="fa-brands fa-python mr-2 text-blue-500 dark:text-blue-400 text-lg"></i>输入: .ipynb JSON 源码
+                    </span>
+                    <button id="clearBtn" class="text-xs bg-white dark:bg-slate-700 hover:bg-red-50 dark:hover:bg-red-900/40 text-gray-500 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400 px-3 py-1.5 rounded-full border border-gray-200 dark:border-slate-600 transition-all shadow-sm">
+                        <i class="fa-solid fa-trash-can mr-1"></i>清空
+                    </button>
+                </div>
+                <textarea id="inputIpynb" class="flex-1 w-full p-5 bg-transparent resize-none focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-400/50 dark:focus:ring-blue-500/40 text-[13px] leading-relaxed dark:text-slate-300 dark:placeholder-slate-500" placeholder='在这里粘贴 Jupyter Notebook (.ipynb) 的源码...
+{
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "source": [ "# Hello World" ]
+    }
+  ]
+}'></textarea>
+            </div>
+
+            <!-- 中间：控制按钮 -->
+            <div class="flex lg:flex-col justify-center items-center gap-4 py-2">
+                <button id="convertBtn" class="group relative inline-flex items-center justify-center px-8 py-4 font-bold text-white transition-all duration-300 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 dark:from-blue-600 dark:to-purple-600 dark:hover:from-blue-500 dark:hover:to-purple-500 rounded-2xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-slate-900 hover:scale-105 shadow-lg shadow-blue-500/30 dark:shadow-blue-900/40 hover:shadow-purple-500/40 dark:hover:shadow-purple-900/50">
+                    <span class="mr-2 hidden lg:inline tracking-widest text-lg">转换</span>
+                    <i class="fa-solid fa-wand-magic-sparkles lg:rotate-0 rotate-90 text-xl group-hover:animate-pulse"></i>
+                    <span class="ml-2 inline lg:hidden tracking-widest">转换</span>
+                </button>
+            </div>
+
+            <!-- 右侧：输出区域 -->
+            <div class="flex-1 flex flex-col glass rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-xl dark:hover:shadow-2xl dark:hover:shadow-black/50 relative group">
+                <div class="bg-white/60 dark:bg-slate-800/60 px-5 py-3 border-b border-gray-200/50 dark:border-slate-700/50 flex justify-between items-center transition-colors duration-500">
+                    <span class="font-semibold text-gray-700 dark:text-gray-200 flex items-center">
+                        <i class="fa-brands fa-markdown mr-2 text-purple-500 dark:text-purple-400 text-lg"></i>输出: Markdown
+                    </span>
+                    <button id="copyBtn" class="text-xs bg-white dark:bg-slate-700 hover:bg-green-50 dark:hover:bg-green-900/40 text-gray-500 dark:text-gray-300 hover:text-green-600 dark:hover:text-green-400 px-3 py-1.5 rounded-full border border-gray-200 dark:border-slate-600 transition-all shadow-sm">
+                        <i class="fa-regular fa-copy mr-1"></i>复制
+                    </button>
+                </div>
+                <textarea id="outputMd" class="flex-1 w-full p-5 bg-transparent resize-none focus:outline-none focus:ring-2 focus:ring-inset focus:ring-purple-400/50 dark:focus:ring-purple-500/40 text-[13px] leading-relaxed text-slate-700 dark:text-slate-300 bg-slate-50/30 dark:bg-slate-900/20 dark:placeholder-slate-500" readonly placeholder="神奇的事情即将发生，转换后的 Markdown 内容将在这里生成..."></textarea>
+            </div>
+            
+        </div>
+    </div>
+
+    <!-- 逻辑脚本 -->
+    <script type="module">
+        import { MarkItDown } from 'https://esm.sh/markitdown-ts';
+
+        // --- 主题切换逻辑 ---
+        const themeToggleBtn = document.getElementById('themeToggleBtn');
+        
+        themeToggleBtn.addEventListener('click', () => {
+            // 切换 dark 类
+            document.documentElement.classList.toggle('dark');
+            
+            // 更新 localStorage 记忆
+            if (document.documentElement.classList.contains('dark')) {
+                localStorage.theme = 'dark';
+            } else {
+                localStorage.theme = 'light';
+            }
+        });
+
+        // --- 核心业务逻辑 ---
+        const inputIpynb = document.getElementById('inputIpynb');
+        const outputMd = document.getElementById('outputMd');
+        const convertBtn = document.getElementById('convertBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const copyBtn = document.getElementById('copyBtn');
+
+        // 清空输入
+        clearBtn.addEventListener('click', () => {
+            inputIpynb.value = '';
+            outputMd.value = '';
+        });
+
+        // 一键复制结果 (兼容深浅色状态的类名切换)
+        copyBtn.addEventListener('click', async () => {
+            if (!outputMd.value) return;
+            try {
+                await navigator.clipboard.writeText(outputMd.value);
+                const originalText = copyBtn.innerHTML;
+                copyBtn.innerHTML = '<i class="fa-solid fa-check mr-1"></i>成功';
+                
+                // 增加临时成功高亮样式
+                copyBtn.classList.add('!text-green-600', 'dark:!text-green-400', '!border-green-400');
+                
+                setTimeout(() => {
+                    copyBtn.innerHTML = originalText;
+                    copyBtn.classList.remove('!text-green-600', 'dark:!text-green-400', '!border-green-400');
+                }, 2000);
+            } catch (err) {
+                alert('复制失败，请手动选取复制！');
+            }
+        });
+
+        // 核心转换逻辑
+        convertBtn.addEventListener('click', async () => {
+            const rawContent = inputIpynb.value.trim();
+            if (!rawContent) {
+                alert('请先在左侧输入或粘贴 .ipynb 的 JSON 源码！');
+                return;
+            }
+
+            const originalBtnHTML = convertBtn.innerHTML;
+            convertBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin-pulse text-xl"></i>';
+            convertBtn.disabled = true;
+
+            try {
+                const ipynbData = JSON.parse(rawContent);
+
+                try {
+                    const markitdown = new MarkItDown();
+                    const file = new File([rawContent], "notebook.ipynb", { type: "application/x-ipynb+json" });
+                    const result = await markitdown.convert(file); 
+                    outputMd.value = result.markdown || result.text || String(result);
+                } catch (markItDownErr) {
+                    console.warn("markitdown-ts 依赖部分 Node API，在纯浏览器环境已触发自动降级:", markItDownErr);
+                    outputMd.value = parseIpynbToMarkdown(ipynbData);
+                }
+            } catch (jsonErr) {
+                alert('解析错误：输入的不是有效的 JSON 格式！\n\n检查报错信息: ' + jsonErr.message);
+            } finally {
+                convertBtn.innerHTML = originalBtnHTML;
+                convertBtn.disabled = false;
+            }
+        });
+
+        function parseIpynbToMarkdown(notebook) {
+            if (!notebook || !notebook.cells || !Array.isArray(notebook.cells)) {
+                throw new Error("无效的 Notebook 结构 (缺少 cells 数组)");
+            }
+
+            let markdownArray = [];
+
+            notebook.cells.forEach(cell => {
+                const source = Array.isArray(cell.source) ? cell.source.join('') : (cell.source || '');
+                
+                if (cell.cell_type === 'markdown') {
+                    markdownArray.push(source);
+                } else if (cell.cell_type === 'code') {
+                    markdownArray.push(`\`\`\`python\n${source}\n\`\`\``);
+                    if (cell.outputs && Array.isArray(cell.outputs)) {
+                        cell.outputs.forEach(output => {
+                            if (output.output_type === 'stream' && output.text) {
+                                const text = Array.isArray(output.text) ? output.text.join('') : output.text;
+                                markdownArray.push(`**Output:**\n\`\`\`text\n${text.trim()}\n\`\`\``);
+                            } else if (output.output_type === 'execute_result' && output.data && output.data['text/plain']) {
+                                const text = Array.isArray(output.data['text/plain']) ? output.data['text/plain'].join('') : output.data['text/plain'];
+                                markdownArray.push(`**Result:**\n\`\`\`text\n${text.trim()}\n\`\`\``);
+                            }
+                        });
+                    }
+                } else if (cell.cell_type === 'raw') {
+                    markdownArray.push(`\`\`\`text\n${source}\n\`\`\``);
+                }
+            });
+
+            return markdownArray.join('\n\n');
+        }
+    </script>
+</body>
+</html>
