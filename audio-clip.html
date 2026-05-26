@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Web 本地音频无损剪切器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = { darkMode: 'class' }
+      // 初始化系统深浅色主题
+      if (
+        localStorage.theme === 'dark' ||
+        (!('theme' in localStorage) &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches)
+      ) {
+        document.documentElement.classList.add('dark')
+      } else {
+        document.documentElement.classList.remove('dark')
+      }
+    </script>
+    <style>
+      /* 隐藏原生输入框的箭头 */
+      input[type='number']::-webkit-inner-spin-button,
+      input[type='number']::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      input[type='number'] {
+        -moz-appearance: textfield;
+      }
+
+      .timeline-handle {
+        transition:
+          height 0.2s,
+          background-color 0.2s;
+      }
+      .timeline-handle:hover,
+      .timeline-handle.active {
+        height: 120%;
+        background-color: #3b82f6;
+        z-index: 10;
+      }
+    </style>
+  </head>
+  <body
+    class="bg-gray-50 text-gray-800 dark:bg-gray-900 dark:text-gray-200 min-h-screen transition-colors duration-300"
+  >
+    <div class="max-w-4xl mx-auto p-6">
+      <div class="flex justify-between items-center mb-8">
+        <h1
+          class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-teal-400"
+        >
+          Audio Cutter (FFmpeg Wasm)
+        </h1>
+        <button
+          id="themeToggle"
+          class="p-2 rounded-lg bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 transition"
+        >
+          <span id="themeIcon" class="text-xl">🌓</span>
+        </button>
+      </div>
+
+      <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 mb-6">
+        <div class="mb-6">
+          <label class="block text-sm font-medium mb-2"
+            >1. 导入音频文件 (支持 mp3, m4a, wav, aac 等)</label
+          >
+          <input
+            type="file"
+            id="audioInput"
+            accept="audio/*"
+            class="block w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-gray-700 dark:file:text-blue-400 dark:hover:file:bg-gray-600 transition-all"
+          />
+        </div>
+
+        <audio id="audioPlayer" class="hidden"></audio>
+
+        <div
+          id="editorWorkspace"
+          class="hidden opacity-0 transition-opacity duration-500"
+        >
+          <label class="block text-sm font-medium mb-2">2. 选择剪切范围</label>
+
+          <div
+            class="relative w-full h-16 bg-gray-100 dark:bg-gray-700 rounded-lg mb-4 flex items-center select-none"
+            id="timeline"
+          >
+            <div
+              id="playHead"
+              class="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 pointer-events-none hidden"
+            ></div>
+            <div
+              id="selectionArea"
+              class="absolute top-0 bottom-0 bg-blue-200 dark:bg-blue-900/50 pointer-events-none border-y border-blue-400"
+            ></div>
+            <div
+              id="handleStart"
+              class="timeline-handle absolute top-0 bottom-0 w-3 bg-gray-400 dark:bg-gray-500 cursor-ew-resize transform -translate-x-1/2 rounded-full flex items-center justify-center shadow"
+            >
+              <div class="w-0.5 h-1/3 bg-white"></div>
+            </div>
+            <div
+              id="handleEnd"
+              class="timeline-handle absolute top-0 bottom-0 w-3 bg-gray-400 dark:bg-gray-500 cursor-ew-resize transform -translate-x-1/2 rounded-full flex items-center justify-center shadow"
+            >
+              <div class="w-0.5 h-1/3 bg-white"></div>
+            </div>
+          </div>
+
+          <div class="flex justify-between items-center mb-6 gap-4">
+            <div class="flex items-center gap-2">
+              <span class="text-sm">起点 (秒):</span>
+              <input
+                type="number"
+                id="inputStart"
+                step="0.1"
+                min="0"
+                class="w-24 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div class="text-xs text-gray-500" id="durationDisplay">
+              总长: 0.00s | 截取: 0.00s
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-sm">终点 (秒):</span>
+              <input
+                type="number"
+                id="inputEnd"
+                step="0.1"
+                min="0"
+                class="w-24 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <div class="flex gap-4 mb-8">
+            <button
+              id="btnPlayTrimmed"
+              class="flex-1 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition font-medium"
+            >
+              ▶ 播放裁剪部分
+            </button>
+            <button
+              id="btnPlayFull"
+              class="flex-1 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-lg transition font-medium"
+            >
+              ▶ 播放完整音频
+            </button>
+            <button
+              id="btnStop"
+              class="px-6 py-2 bg-red-100 text-red-600 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50 rounded-lg transition font-medium"
+            >
+              ⏹ 停止
+            </button>
+          </div>
+
+          <label class="block text-sm font-medium mb-2">3. 导出设置</label>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div>
+              <span class="text-xs text-gray-500 block mb-1">格式</span>
+              <select
+                id="exportFormat"
+                class="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded border border-gray-300 dark:border-gray-600 focus:outline-none"
+              >
+                <option value="mp3">MP3</option>
+                <option value="wav">WAV (无损)</option>
+                <option value="aac">AAC</option>
+                <option value="m4a">M4A</option>
+              </select>
+            </div>
+            <div>
+              <span class="text-xs text-gray-500 block mb-1"
+                >比特率 (仅有损格式)</span
+              >
+              <select
+                id="exportBitrate"
+                class="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded border border-gray-300 dark:border-gray-600 focus:outline-none"
+              >
+                <option value="128k">128 kbps (标准)</option>
+                <option value="192k">192 kbps (较高)</option>
+                <option value="256k">256 kbps (高品质)</option>
+                <option value="320k" selected>320 kbps (最高)</option>
+              </select>
+            </div>
+          </div>
+
+          <button
+            id="btnExport"
+            class="w-full py-3 bg-gradient-to-r from-teal-400 to-blue-500 hover:from-teal-500 hover:to-blue-600 text-white rounded-lg shadow-lg transition font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            ✂️ 开始处理并下载
+          </button>
+        </div>
+      </div>
+
+      <div
+        class="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 text-sm font-mono text-gray-600 dark:text-gray-400 h-32 overflow-y-auto"
+        id="logPanel"
+      >
+        等待操作...<br />
+        [注意] 首次处理需要从 CDN 下载 FFmpeg.wasm 核心文件 (约
+        10MB)，请耐心等待。<br />
+      </div>
+    </div>
+
+    <script type="module">
+      // 使用 jsDelivr 动态引入单线程版本的 FFmpeg 模块
+      // 1. 顶部引入处：增加 toBlobURL 工具函数
+      import { FFmpeg } from './assets/@ffmpeg/ffmpeg@0.12.7/dist/esm/index.js'
+      import {
+        fetchFile,
+        toBlobURL,
+      } from './assets/@ffmpeg/util@0.12.1/dist/esm/index.js'
+
+      // --- 全局变量与 DOM 元素 ---
+      const ffmpeg = new FFmpeg()
+      let audioDuration = 0
+      let startTime = 0
+      let endTime = 0
+      let currentFile = null
+      let originalExtension = ''
+      let isPlayTrimmedMode = false
+
+      const ui = {
+        audioInput: document.getElementById('audioInput'),
+        audioPlayer: document.getElementById('audioPlayer'),
+        workspace: document.getElementById('editorWorkspace'),
+        timeline: document.getElementById('timeline'),
+        selectionArea: document.getElementById('selectionArea'),
+        handleStart: document.getElementById('handleStart'),
+        handleEnd: document.getElementById('handleEnd'),
+        playHead: document.getElementById('playHead'),
+        inputStart: document.getElementById('inputStart'),
+        inputEnd: document.getElementById('inputEnd'),
+        durationDisplay: document.getElementById('durationDisplay'),
+        btnPlayTrimmed: document.getElementById('btnPlayTrimmed'),
+        btnPlayFull: document.getElementById('btnPlayFull'),
+        btnStop: document.getElementById('btnStop'),
+        btnExport: document.getElementById('btnExport'),
+        exportFormat: document.getElementById('exportFormat'),
+        exportBitrate: document.getElementById('exportBitrate'),
+        logPanel: document.getElementById('logPanel'),
+        themeToggle: document.getElementById('themeToggle'),
+      }
+
+      // --- 日志系统 ---
+      function log(msg) {
+        ui.logPanel.innerHTML += `[${new Date().toLocaleTimeString()}] ${msg}<br>`
+        ui.logPanel.scrollTop = ui.logPanel.scrollHeight
+      }
+
+      // --- 主题切换 ---
+      ui.themeToggle.addEventListener('click', () => {
+        if (document.documentElement.classList.contains('dark')) {
+          document.documentElement.classList.remove('dark')
+          localStorage.theme = 'light'
+        } else {
+          document.documentElement.classList.add('dark')
+          localStorage.theme = 'dark'
+        }
+      })
+
+      // --- 文件读取与初始化 ---
+      ui.audioInput.addEventListener('change', (e) => {
+        const file = e.target.files[0]
+        if (!file) return
+
+        currentFile = file
+        originalExtension = file.name.split('.').pop().toLowerCase()
+
+        const objectUrl = URL.createObjectURL(file)
+        ui.audioPlayer.src = objectUrl
+
+        ui.audioPlayer.onloadedmetadata = () => {
+          audioDuration = ui.audioPlayer.duration
+          startTime = 0
+          endTime = audioDuration
+
+          ui.inputStart.value = 0
+          ui.inputEnd.value = audioDuration.toFixed(2)
+          ui.inputStart.max = audioDuration
+          ui.inputEnd.max = audioDuration
+
+          updateVisuals()
+          ui.workspace.classList.remove('hidden')
+          setTimeout(() => ui.workspace.classList.remove('opacity-0'), 50)
+          log(`已加载音频: ${file.name} (时长: ${audioDuration.toFixed(2)}s)`)
+        }
+      })
+
+      // --- 自定义时间轴交互逻辑 ---
+      let activeHandle = null
+
+      function updateVisuals() {
+        // 限制时间范围逻辑
+        if (startTime < 0) startTime = 0
+        if (endTime > audioDuration) endTime = audioDuration
+        if (startTime > endTime) {
+          if (activeHandle === 'start') startTime = endTime
+          else endTime = startTime
+        }
+
+        // 更新输入框
+        if (document.activeElement !== ui.inputStart)
+          ui.inputStart.value = startTime.toFixed(2)
+        if (document.activeElement !== ui.inputEnd)
+          ui.inputEnd.value = endTime.toFixed(2)
+
+        // 更新显示文本
+        ui.durationDisplay.innerText = `总长: ${audioDuration.toFixed(2)}s | 截取: ${(endTime - startTime).toFixed(2)}s`
+
+        // 更新图形滑块位置
+        const startPct = (startTime / audioDuration) * 100
+        const endPct = (endTime / audioDuration) * 100
+
+        ui.handleStart.style.left = `${startPct}%`
+        ui.handleEnd.style.left = `${endPct}%`
+
+        ui.selectionArea.style.left = `${startPct}%`
+        ui.selectionArea.style.width = `${endPct - startPct}%`
+      }
+
+      // 监听输入框变化
+      ui.inputStart.addEventListener('input', (e) => {
+        startTime = parseFloat(e.target.value) || 0
+        updateVisuals()
+      })
+      ui.inputEnd.addEventListener('input', (e) => {
+        endTime = parseFloat(e.target.value) || 0
+        updateVisuals()
+      })
+
+      // 鼠标/触摸拖动逻辑
+      function onPointerMove(e) {
+        if (!activeHandle) return
+        const rect = ui.timeline.getBoundingClientRect()
+        let clickX = e.clientX - rect.left
+        let percentage = clickX / rect.width
+        percentage = Math.max(0, Math.min(1, percentage)) // 限制在 0-1 之间
+
+        let newTime = percentage * audioDuration
+
+        if (activeHandle === 'start') {
+          startTime = newTime
+        } else if (activeHandle === 'end') {
+          endTime = newTime
+        }
+        updateVisuals()
+      }
+
+      function onPointerUp() {
+        if (activeHandle) {
+          if (activeHandle === 'start')
+            ui.handleStart.classList.remove('active')
+          if (activeHandle === 'end') ui.handleEnd.classList.remove('active')
+          activeHandle = null
+          document.removeEventListener('pointermove', onPointerMove)
+          document.removeEventListener('pointerup', onPointerUp)
+        }
+      }
+
+      ui.handleStart.addEventListener('pointerdown', (e) => {
+        activeHandle = 'start'
+        ui.handleStart.classList.add('active')
+        e.preventDefault()
+        document.addEventListener('pointermove', onPointerMove)
+        document.addEventListener('pointerup', onPointerUp)
+      })
+
+      ui.handleEnd.addEventListener('pointerdown', (e) => {
+        activeHandle = 'end'
+        ui.handleEnd.classList.add('active')
+        e.preventDefault()
+        document.addEventListener('pointermove', onPointerMove)
+        document.addEventListener('pointerup', onPointerUp)
+      })
+
+      // --- 播放器控制 ---
+      ui.audioPlayer.addEventListener('timeupdate', () => {
+        // 更新播放进度指示器
+        if (!ui.audioPlayer.paused) {
+          const currentPct = (ui.audioPlayer.currentTime / audioDuration) * 100
+          ui.playHead.style.left = `${currentPct}%`
+        }
+
+        // 裁剪试听模式下自动暂停
+        if (isPlayTrimmedMode && ui.audioPlayer.currentTime >= endTime) {
+          ui.audioPlayer.pause()
+          ui.playHead.classList.add('hidden')
+          isPlayTrimmedMode = false
+        }
+      })
+
+      ui.audioPlayer.addEventListener('pause', () => {
+        ui.playHead.classList.add('hidden')
+      })
+
+      ui.btnPlayFull.addEventListener('click', () => {
+        isPlayTrimmedMode = false
+        ui.audioPlayer.currentTime = 0
+        ui.playHead.classList.remove('hidden')
+        ui.audioPlayer.play()
+      })
+
+      ui.btnPlayTrimmed.addEventListener('click', () => {
+        isPlayTrimmedMode = true
+        ui.audioPlayer.currentTime = startTime
+        ui.playHead.classList.remove('hidden')
+        ui.audioPlayer.play()
+      })
+
+      ui.btnStop.addEventListener('click', () => {
+        ui.audioPlayer.pause()
+        isPlayTrimmedMode = false
+        ui.playHead.classList.add('hidden')
+      })
+
+      // --- FFmpeg 核心处理模块 ---
+      ui.btnExport.addEventListener('click', async () => {
+        if (!currentFile) return
+
+        const format = ui.exportFormat.value
+        const bitrate = ui.exportBitrate.value
+        const duration = endTime - startTime
+
+        if (duration <= 0) {
+          alert('剪切长度必须大于0')
+          return
+        }
+
+        ui.btnExport.disabled = true
+        ui.btnExport.innerText = '⏳ 正在加载 FFmpeg 核心...'
+
+        try {
+          // 1. 初始化单线程 FFmpeg (解决 COOP/COEP 问题)
+          if (!ffmpeg.loaded) {
+            log('开始加载 FFmpeg (Core v0.12)... 这可能需要几秒钟。')
+
+            ffmpeg.on('log', ({ message }) => {
+              console.log(message)
+              // 只拦截显示部分有用的日志
+              if (message.includes('time=')) log('FFmpeg 进度: ' + message)
+            })
+
+            await ffmpeg.load({
+              coreURL:
+                '/assets/@ffmpeg/core@0.12.4/dist/esm/ffmpeg-core.js',
+              wasmURL:
+                '/assets/@ffmpeg/core@0.12.4/dist/esm/ffmpeg-core.wasm',
+            })
+            log('FFmpeg 加载成功！')
+          }
+
+          ui.btnExport.innerText = '⚙️ 正在处理音频...'
+          log('正在将文件写入虚拟文件系统...')
+
+          const inputFileName = `input.${originalExtension}`
+          const outputFileName = `output.${format}`
+
+          // 2. 将用户文件写入 FFmpeg WASM 虚拟文件系统
+          await ffmpeg.writeFile(inputFileName, await fetchFile(currentFile))
+
+          // 3. 构建命令行参数
+          // 使用 -ss 放前面为了快速寻址(部分情况)，放后面更精准，对于音频我们放到 -i 后面保证精准裁剪
+          let ffmpegArgs = [
+            '-i',
+            inputFileName,
+            '-ss',
+            startTime.toString(),
+            '-t',
+            duration.toString(),
+          ]
+
+          // 针对不同格式的输出处理
+          if (format === 'wav') {
+            // 无损导出不需要 bitrate
+          } else {
+            // 默认 mp3, aac, m4a 携带音频码率
+            ffmpegArgs.push('-b:a', bitrate)
+          }
+
+          ffmpegArgs.push(outputFileName)
+
+          log(`执行命令: ffmpeg ${ffmpegArgs.join(' ')}`)
+
+          // 4. 执行命令
+          await ffmpeg.exec(ffmpegArgs)
+
+          log('处理完成！准备下载...')
+
+          // 5. 读取输出文件并创建下载触发
+          const fileData = await ffmpeg.readFile(outputFileName)
+          const data = new Uint8Array(fileData)
+          const blob = new Blob([data], { type: `audio/${format}` })
+          const url = URL.createObjectURL(blob)
+
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `trimmed_audio.${format}`
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
+
+          // 6. 清理内存，防止浏览器崩溃
+          await ffmpeg.deleteFile(inputFileName)
+          await ffmpeg.deleteFile(outputFileName)
+          log('内存清理完毕。导出成功！')
+        } catch (error) {
+          console.error(error)
+          log(`<span class="text-red-500">发生错误: ${error.message}</span>`)
+          alert('处理时发生错误，请查看底部日志。')
+        } finally {
+          ui.btnExport.disabled = false
+          ui.btnExport.innerText = '✂️ 开始处理并下载'
+        }
+      })
+    </script>
+  </body>
+</html>

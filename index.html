@@ -43,7 +43,11 @@
           -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
           'Helvetica Neue', Arial, sans-serif;
         /* 添加全局颜色过渡效果 */
-        transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, shadow 0.3s ease;
+        transition:
+          background-color 0.3s ease,
+          color 0.3s ease,
+          border-color 0.3s ease,
+          shadow 0.3s ease;
       }
 
       body {
@@ -131,11 +135,21 @@
       }
 
       /* 针对不同卡片设置颜色，深色模式下稍微调亮一点以保持视觉舒适 */
-      .card:nth-child(1)::before { background: #10b981; } 
-      .card:nth-child(2)::before { background: #f59e0b; } 
-      .card:nth-child(3)::before { background: #3b82f6; } 
-      .card:nth-child(4)::before { background: #ec4899; }
-      .card:nth-child(5)::before { background: #8b5cf6; }
+      .card:nth-child(1)::before {
+        background: #10b981;
+      }
+      .card:nth-child(2)::before {
+        background: #f59e0b;
+      }
+      .card:nth-child(3)::before {
+        background: #3b82f6;
+      }
+      .card:nth-child(4)::before {
+        background: #ec4899;
+      }
+      .card:nth-child(5)::before {
+        background: #8b5cf6;
+      }
 
       .icon {
         font-size: 3rem;
@@ -181,7 +195,9 @@
         text-decoration: none;
         border-radius: 10px;
         font-weight: 600;
-        transition: background-color 0.2s, transform 0.1s;
+        transition:
+          background-color 0.2s,
+          transform 0.1s;
         margin-top: auto;
       }
 
@@ -194,13 +210,25 @@
       }
 
       @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(30px); }
-        to { opacity: 1; transform: translateY(0); }
+        from {
+          opacity: 0;
+          transform: translateY(30px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
 
       @keyframes fadeInDown {
-        from { opacity: 0; transform: translateY(-30px); }
-        to { opacity: 1; transform: translateY(0); }
+        from {
+          opacity: 0;
+          transform: translateY(-30px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
 
       footer {
@@ -211,9 +239,15 @@
       }
 
       @media (max-width: 768px) {
-        header h1 { font-size: 2rem; }
-        .container { padding: 0 1rem; }
-        .card { padding: 1.5rem; }
+        header h1 {
+          font-size: 2rem;
+        }
+        .container {
+          padding: 0 1rem;
+        }
+        .card {
+          padding: 1.5rem;
+        }
       }
     </style>
   </head>
@@ -229,72 +263,101 @@
       <article class="card">
         <div class="icon">📊</div>
         <h2>百万级 Excel 数据极速筛选</h2>
-        <p>基于 Web Worker 和 VTable 构建的高性能数据查看器。支持拖拽上传、复杂逻辑搜索，无需后端支持。</p>
+        <p>
+          基于 Web Worker 和 VTable
+          构建的高性能数据查看器。支持拖拽上传、复杂逻辑搜索，无需后端支持。
+        </p>
         <div class="tags">
           <span class="tag">VTable</span>
           <span class="tag">Web Worker</span>
           <span class="tag">SheetJS</span>
         </div>
-        <a href="./excel-display.html" class="btn" target="_blank">在线体验 Demo</a>
+        <a href="./excel-display.html" class="btn" target="_blank"
+          >在线体验 Demo</a
+        >
       </article>
 
       <article class="card">
         <div class="icon">🧠</div>
         <h2>超大 JSON 可视化预览</h2>
-        <p>利用虚拟列表和按需加载技术，突破 DOM 渲染瓶颈，60fps 丝滑滚动浏览几十MB级 JSON。</p>
+        <p>
+          利用虚拟列表和按需加载技术，突破 DOM 渲染瓶颈，60fps
+          丝滑滚动浏览几十MB级 JSON。
+        </p>
         <div class="tags">
           <span class="tag">Vanilla JS</span>
           <span class="tag">虚拟滚动</span>
           <span class="tag">零依赖</span>
         </div>
-        <a href="./large-json-preview.html" class="btn" target="_blank">在线体验 Demo</a>
+        <a href="./large-json-preview.html" class="btn" target="_blank"
+          >在线体验 Demo</a
+        >
       </article>
 
       <article class="card">
         <div class="icon">📦</div>
         <h2>Parquet 本地预览与搜索</h2>
-        <p>利用 WebAssembly 本地极速解析，数据 0 字节上传保障隐私，支持实时多关键词全文检索。</p>
+        <p>
+          利用 WebAssembly 本地极速解析，数据 0
+          字节上传保障隐私，支持实时多关键词全文检索。
+        </p>
         <div class="tags">
           <span class="tag">WebAssembly</span>
           <span class="tag">hyparquet</span>
           <span class="tag">纯本地解析</span>
         </div>
-        <a href="./parquet-preview.html" class="btn" target="_blank">在线体验 Demo</a>
+        <a href="./parquet-preview.html" class="btn" target="_blank"
+          >在线体验 Demo</a
+        >
       </article>
 
       <article class="card">
         <div class="icon">🤖</div>
         <h2>Qwen3.5 WebGPU 本地对话</h2>
-        <p>基于 Transformers.js 和 WebGPU，在浏览器中直接本地运行视觉语言大模型，无需服务器。</p>
+        <p>
+          基于 Transformers.js 和
+          WebGPU，在浏览器中直接本地运行视觉语言大模型，无需服务器。
+        </p>
         <div class="tags">
           <span class="tag">Transformers.js</span>
           <span class="tag">WebGPU</span>
           <span class="tag">Qwen3.5</span>
         </div>
-        <a href="./qwen-webgpu-chat.html" class="btn" target="_blank">在线体验 Demo</a>
+        <a href="./qwen-webgpu-chat.html" class="btn" target="_blank"
+          >在线体验 Demo</a
+        >
       </article>
 
       <article class="card">
         <div class="icon">🤖</div>
         <h2>Gemma4 WebGPU 本地对话</h2>
-        <p>基于 Transformers.js 和 WebGPU，在浏览器中直接本地运行视觉语言大模型，无需服务器。</p>
+        <p>
+          基于 Transformers.js 和
+          WebGPU，在浏览器中直接本地运行视觉语言大模型，无需服务器。
+        </p>
         <div class="tags">
           <span class="tag">Transformers.js</span>
           <span class="tag">WebGPU</span>
           <span class="tag">Gemma4</span>
         </div>
-        <a href="./gemma-webgpu-chat.html" class="btn" target="_blank">在线体验 Demo</a>
+        <a href="./gemma-webgpu-chat.html" class="btn" target="_blank"
+          >在线体验 Demo</a
+        >
       </article>
 
       <article class="card">
         <div class="icon">✍</div>
         <h2>OpenAI Stream 优雅解析器</h2>
-        <p>接口调用返回流式的数据不好看？来用这个工具可视化展示一下吧！支持实时渲染。</p>
+        <p>
+          接口调用返回流式的数据不好看？来用这个工具可视化展示一下吧！支持实时渲染。
+        </p>
         <div class="tags">
           <span class="tag">OpenAI</span>
           <span class="tag">Markdown-it</span>
         </div>
-        <a href="./openai-stream-parse.html" class="btn" target="_blank">在线体验 Demo</a>
+        <a href="./openai-stream-parse.html" class="btn" target="_blank"
+          >在线体验 Demo</a
+        >
       </article>
 
       <article class="card">
@@ -304,12 +367,28 @@
           <span class="tag">ipynb</span>
           <span class="tag">Markdown-TS</span>
         </div>
-        <a href="./ipynb-to-markdown.html" class="btn" target="_blank">在线体验 Demo</a>
+        <a href="./ipynb-to-markdown.html" class="btn" target="_blank"
+          >在线体验 Demo</a
+        >
+      </article>
+
+      <article class="card">
+        <div class="icon">✂️</div>
+        <h2>音频裁剪</h2>
+        <div class="tags">
+          <span class="tag">FFmpeg.wasm</span>
+          <span class="tag">tailwind.css</span>
+        </div>
+        <a href="./audio-clip.html" class="btn" target="_blank"
+          >在线体验 Demo</a
+        >
       </article>
     </main>
 
     <footer>
-      <p>&copy; 2026 AI Generated Tools Collection. Built with ❤️ and Vanilla JS.</p>
+      <p>
+        &copy; 2026 AI Generated Tools Collection. Built with ❤️ and Vanilla JS.
+      </p>
     </footer>
   </body>
 </html>
