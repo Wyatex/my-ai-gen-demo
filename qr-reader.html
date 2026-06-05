@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>二维码内容识别器</title>
+    <!-- 引入 jsQR 库用于解码 -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <style>
+        /* CSS 变量：浅色主题 */
+        :root {
+            --bg-color: #f3f4f6;
+            --card-bg: #ffffff;
+            --text-main: #1f2937;
+            --text-muted: #6b7280;
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --border-color: #d1d5db;
+            --zone-bg: #f9fafb;
+            --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        /* CSS 变量：深色主题 */
+        [data-theme="dark"] {
+            --bg-color: #111827;
+            --card-bg: #1f2937;
+            --text-main: #f9fafb;
+            --text-muted: #9ca3af;
+            --primary: #60a5fa;
+            --primary-hover: #3b82f6;
+            --border-color: #374151;
+            --zone-bg: #374151;
+            --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .container {
+            background-color: var(--card-bg);
+            width: 90%;
+            max-width: 500px;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: var(--shadow);
+            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .theme-toggle {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--text-main);
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            transition: background-color 0.2s;
+        }
+
+        .theme-toggle:hover {
+            background-color: var(--border-color);
+        }
+
+        .drop-zone {
+            border: 2px dashed var(--border-color);
+            border-radius: 12px;
+            padding: 40px 20px;
+            text-align: center;
+            background-color: var(--zone-bg);
+            cursor: pointer;
+            transition: border-color 0.3s, background-color 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .drop-zone.dragover {
+            border-color: var(--primary);
+            background-color: rgba(59, 130, 246, 0.1);
+        }
+
+        .drop-zone p {
+            color: var(--text-muted);
+            margin-top: 10px;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .drop-zone input[type="file"] {
+            display: none;
+        }
+
+        .preview-img {
+            max-width: 100%;
+            max-height: 200px;
+            border-radius: 8px;
+            display: none;
+            margin: 0 auto;
+        }
+
+        .icon-upload {
+            width: 48px;
+            height: 48px;
+            fill: var(--text-muted);
+            margin-bottom: 10px;
+        }
+
+        .result-container {
+            margin-top: 20px;
+            display: none;
+        }
+
+        .result-container.active {
+            display: block;
+            animation: fadeIn 0.4s ease forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .result-label {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        textarea {
+            width: 100%;
+            height: 100px;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background-color: var(--zone-bg);
+            color: var(--text-main);
+            font-family: inherit;
+            font-size: 1rem;
+            resize: none;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        textarea:focus {
+            border-color: var(--primary);
+        }
+
+        .btn-copy {
+            margin-top: 10px;
+            width: 100%;
+            padding: 12px;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .btn-copy:hover {
+            background-color: var(--primary-hover);
+        }
+
+        /* 状态提示 */
+        .status {
+            margin-top: 10px;
+            text-align: center;
+            font-size: 0.9rem;
+            color: #ef4444; /* 红色用于报错 */
+            min-height: 20px;
+        }
+        
+        .status.success {
+            color: #10b981; /* 绿色用于成功 */
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="header">
+            <h1>QR 识别器</h1>
+            <button class="theme-toggle" id="themeToggle" title="切换深浅色">
+                <svg id="themeIcon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <!-- 默认显示月亮（浅色模式下的图标） -->
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                </svg>
+            </button>
+        </div>
+
+        <div class="drop-zone" id="dropZone">
+            <svg class="icon-upload" id="uploadIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
+            </svg>
+            <img id="previewImg" class="preview-img" alt="二维码预览">
+            <div id="dropText">
+                <p><strong>点击选择</strong> 或 <strong>拖拽图片</strong> 到此处</p>
+                <p>支持 <strong>Ctrl + V</strong> 直接粘贴图片</p>
+            </div>
+            <input type="file" id="fileInput" accept="image/*">
+        </div>
+        
+        <div class="status" id="statusText"></div>
+
+        <div class="result-container" id="resultContainer">
+            <label class="result-label">识别结果：</label>
+            <textarea id="resultText" readonly placeholder="二维码内容将显示在这里..."></textarea>
+            <button class="btn-copy" id="copyBtn">复制结果</button>
+        </div>
+    </div>
+
+    <script>
+        // DOM 元素
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const previewImg = document.getElementById('previewImg');
+        const uploadIcon = document.getElementById('uploadIcon');
+        const dropText = document.getElementById('dropText');
+        const statusText = document.getElementById('statusText');
+        const resultContainer = document.getElementById('resultContainer');
+        const resultText = document.getElementById('resultText');
+        const copyBtn = document.getElementById('copyBtn');
+        const themeToggle = document.getElementById('themeToggle');
+        const themeIcon = document.getElementById('themeIcon');
+
+        // ======== 主题切换逻辑 ========
+        const sunIcon = '<circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>';
+        const moonIcon = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>';
+
+        function setTheme(isDark) {
+            if (isDark) {
+                document.body.setAttribute('data-theme', 'dark');
+                themeIcon.innerHTML = sunIcon;
+                localStorage.setItem('theme', 'dark');
+            } else {
+                document.body.removeAttribute('data-theme');
+                themeIcon.innerHTML = moonIcon;
+                localStorage.setItem('theme', 'light');
+            }
+        }
+
+        // 初始化主题
+        const savedTheme = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        setTheme(savedTheme === 'dark' || (!savedTheme && prefersDark));
+
+        themeToggle.addEventListener('click', () => {
+            const isDark = document.body.hasAttribute('data-theme');
+            setTheme(!isDark);
+        });
+
+        // ======== 文件处理与二维码解析逻辑 ========
+
+        // 处理选择或传入的图片文件
+        function handleFile(file) {
+            if (!file || !file.type.startsWith('image/')) {
+                showStatus('请提供一张图片文件！', false);
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const imgDataUrl = e.target.result;
+                
+                // UI 变化：显示预览图，隐藏文字和图标
+                previewImg.src = imgDataUrl;
+                previewImg.style.display = 'block';
+                uploadIcon.style.display = 'none';
+                dropText.style.display = 'none';
+                
+                showStatus('正在识别...', true);
+                resultContainer.classList.remove('active');
+
+                // 解析二维码
+                decodeQRCode(imgDataUrl);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 使用 Canvas 和 jsQR 解码
+        function decodeQRCode(dataUrl) {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                
+                // 限制最大尺寸以提升性能（可选）
+                const MAX_WIDTH = 800;
+                let width = img.width;
+                let height = img.height;
+                
+                if (width > MAX_WIDTH) {
+                    height = Math.floor(height * (MAX_WIDTH / width));
+                    width = MAX_WIDTH;
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                ctx.drawImage(img, 0, 0, width, height);
+
+                const imageData = ctx.getImageData(0, 0, width, height);
+                // 调用 jsQR
+                const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                    inversionAttempts: "dontInvert",
+                });
+
+                if (code) {
+                    showStatus('识别成功！', true);
+                    resultText.value = code.data;
+                    resultContainer.classList.add('active');
+                } else {
+                    showStatus('未能识别到二维码，请尝试更换清晰度更高的图片。', false);
+                }
+            };
+            img.src = dataUrl;
+        }
+
+        function showStatus(msg, isSuccess) {
+            statusText.textContent = msg;
+            statusText.className = 'status ' + (isSuccess ? 'success' : '');
+        }
+
+        // ======== 交互事件绑定 ========
+
+        // 1. 点击上传
+        dropZone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) handleFile(e.target.files[0]);
+            // 清空 value 允许重复选同一张图
+            e.target.value = '';
+        });
+
+        // 2. 拖拽上传
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        // 3. 全局 Ctrl+V 粘贴监听
+        document.addEventListener('paste', (e) => {
+            const items = (e.clipboardData || window.clipboardData).items;
+            let imageFound = false;
+            for (let item of items) {
+                if (item.type.indexOf('image') !== -1) {
+                    const blob = item.getAsFile();
+                    handleFile(blob);
+                    imageFound = true;
+                    break;
+                }
+            }
+            if (!imageFound && items.length > 0) {
+                // 判断下粘贴的如果不是图片给个提示（如果是用户故意在输入框打字则忽略）
+                if (e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'INPUT') {
+                    showStatus('剪贴板中没有图片哦，请复制图片后再粘贴！', false);
+                }
+            }
+        });
+
+        // 4. 复制结果
+        copyBtn.addEventListener('click', () => {
+            resultText.select();
+            document.execCommand('copy');
+            const originalText = copyBtn.textContent;
+            copyBtn.textContent = '复制成功 ✔';
+            copyBtn.style.backgroundColor = '#10b981';
+            setTimeout(() => {
+                copyBtn.textContent = originalText;
+                copyBtn.style.backgroundColor = '';
+            }, 2000);
+        });
+
+    </script>
+</body>
+</html>
