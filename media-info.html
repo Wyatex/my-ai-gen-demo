@@ -1453,15 +1453,8 @@
           });
           isFFmpegLoaded = true;
         } catch (err1) {
-          console.warn('Relative path load failed, trying absolute root path...', err1);
+          console.warn('Direct relative path load failed, trying toBlobURL...', err1);
           try {
-            await ffmpeg.load({
-              coreURL: '/assets/@ffmpeg/core@0.12.4/dist/esm/ffmpeg-core.js',
-              wasmURL: '/assets/@ffmpeg/core@0.12.4/dist/esm/ffmpeg-core.wasm',
-            });
-            isFFmpegLoaded = true;
-          } catch (err2) {
-            console.warn('Root path load failed, trying toBlobURL...', err2);
             const blobCore = await toBlobURL(relCore, 'text/javascript');
             const blobWasm = await toBlobURL(relWasm, 'application/wasm');
             await ffmpeg.load({
@@ -1469,6 +1462,9 @@
               wasmURL: blobWasm,
             });
             isFFmpegLoaded = true;
+          } catch (err2) {
+            console.error('All FFmpeg loading attempts failed', err2);
+            throw err2;
           }
         }
 

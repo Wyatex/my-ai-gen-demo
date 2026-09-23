@@ -442,12 +442,28 @@
               if (message.includes('time=')) log('FFmpeg 进度: ' + message)
             })
 
-            await ffmpeg.load({
-              coreURL:
-                '/assets/@ffmpeg/core@0.12.4/dist/esm/ffmpeg-core.js',
-              wasmURL:
-                '/assets/@ffmpeg/core@0.12.4/dist/esm/ffmpeg-core.wasm',
-            })
+            const relCore = new URL(
+              './assets/@ffmpeg/core@0.12.4/dist/esm/ffmpeg-core.js',
+              import.meta.url
+            ).href
+            const relWasm = new URL(
+              './assets/@ffmpeg/core@0.12.4/dist/esm/ffmpeg-core.wasm',
+              import.meta.url
+            ).href
+
+            try {
+              await ffmpeg.load({
+                coreURL: relCore,
+                wasmURL: relWasm,
+              })
+            } catch (e1) {
+              const blobCore = await toBlobURL(relCore, 'text/javascript')
+              const blobWasm = await toBlobURL(relWasm, 'application/wasm')
+              await ffmpeg.load({
+                coreURL: blobCore,
+                wasmURL: blobWasm,
+              })
+            }
             log('FFmpeg 加载成功！')
           }
 
