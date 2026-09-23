@@ -1,0 +1,3028 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Web 媒体详细信息探测器 (音视频与图像全格式 · FFprobe.wasm)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                50: '#eef2ff',
+                100: '#e0e7ff',
+                200: '#c7d2fe',
+                400: '#818cf8',
+                500: '#6366f1',
+                600: '#4f46e5',
+                700: '#4338ca',
+              },
+            },
+          },
+        },
+      }
+      // 初始化深浅色主题
+      if (
+        localStorage.theme === 'dark' ||
+        (!('theme' in localStorage) &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches)
+      ) {
+        document.documentElement.classList.add('dark')
+      } else {
+        document.documentElement.classList.remove('dark')
+      }
+    </script>
+    <style>
+      html {
+        scroll-behavior: smooth;
+      }
+      /* 自定义滚动条 */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(156, 163, 175, 0.4);
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(156, 163, 175, 0.7);
+      }
+      .code-font {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      }
+      /* 透明图像网格棋盘背景 */
+      .checkerboard-bg {
+        background-color: #f8fafc;
+        background-image: linear-gradient(45deg, #e2e8f0 25%, transparent 25%),
+                          linear-gradient(-45deg, #e2e8f0 25%, transparent 25%),
+                          linear-gradient(45deg, transparent 75%, #e2e8f0 75%),
+                          linear-gradient(-45deg, transparent 75%, #e2e8f0 75%);
+        background-size: 20px 20px;
+        background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+      }
+      .dark .checkerboard-bg {
+        background-color: #0f172a;
+        background-image: linear-gradient(45deg, #1e293b 25%, transparent 25%),
+                          linear-gradient(-45deg, #1e293b 25%, transparent 25%),
+                          linear-gradient(45deg, transparent 75%, #1e293b 75%),
+                          linear-gradient(-45deg, transparent 75%, #1e293b 75%);
+        background-size: 20px 20px;
+        background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+      }
+    </style>
+  </head>
+  <body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen transition-colors duration-300 font-sans flex flex-col">
+    <!-- 顶部导航栏 -->
+    <header class="border-b border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md sticky top-0 z-40 transition-colors">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 via-teal-400 to-emerald-400 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+            </svg>
+          </div>
+          <div>
+            <h1 class="font-bold text-lg leading-tight bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 via-teal-500 to-emerald-500 dark:from-indigo-400 dark:via-teal-300 dark:to-emerald-300">
+              Media & Image Inspector
+            </h1>
+            <p class="text-xs text-slate-500 dark:text-slate-400 font-medium">全格式音视频与图像信息探测器 (FFprobe.wasm)</p>
+          </div>
+        </div>
+
+        <!-- 导航操作区 -->
+        <div class="flex items-center space-x-2 sm:space-x-3">
+          <!-- 返回首页链接 -->
+          <a href="./index.html" class="p-2 rounded-lg text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="返回首页">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+            </svg>
+          </a>
+
+          <!-- 深浅色切换按钮 -->
+          <button id="themeToggle" class="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition" title="切换深浅主题">
+            <svg id="sunIcon" class="w-5 h-5 hidden dark:block text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"></path>
+            </svg>
+            <svg id="moonIcon" class="w-5 h-5 block dark:hidden text-indigo-600" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- 主体容器 -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full flex flex-col space-y-8">
+      
+      <!-- 上传拖拽区域 -->
+      <section id="uploadSection" class="relative group">
+        <!-- 接收所有 FFmpeg 支持的多媒体及图片格式 -->
+        <input type="file" id="mediaInput" class="hidden" accept="video/*,audio/*,image/*,.flv,.mp4,.mkv,.webm,.mov,.avi,.wmv,.ts,.m2ts,.m4v,.3gp,.vob,.rmvb,.f4v,.mp3,.wav,.flac,.aac,.ogg,.m4a,.opus,.wma,.aiff,.ape,.ac3,.dts,.jpg,.jpeg,.png,.webp,.gif,.bmp,.tiff,.tif,.heic,.heif,.avif,.ico,.svg,.apng" />
+        
+        <div id="dropZone" class="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-400 bg-white/60 dark:bg-slate-800/50 backdrop-blur rounded-2xl p-8 sm:p-12 text-center cursor-pointer transition-all duration-300 group-hover:shadow-lg group-hover:shadow-indigo-500/5">
+          <div class="max-w-xl mx-auto flex flex-col items-center">
+            <!-- 图标动画 -->
+            <div class="w-16 h-16 mb-4 rounded-2xl bg-indigo-50 dark:bg-slate-700/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center group-hover:scale-110 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300 shadow-sm">
+              <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+              </svg>
+            </div>
+            
+            <h2 class="text-lg sm:text-xl font-semibold mb-2 text-slate-800 dark:text-slate-100">
+              拖拽音视频或图片文件至此处，或 <span class="text-indigo-600 dark:text-indigo-400 underline underline-offset-4 decoration-indigo-300 dark:decoration-indigo-700">点击浏览本地文件</span>
+            </h2>
+            <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mb-5">
+              纯前端 WebAssembly 极速解析 · 0 字节上传 · 保护隐私 · 支持 FFmpeg 支持的全部格式
+            </p>
+            
+            <!-- 分类格式标签列表 -->
+            <div class="space-y-2 w-full text-left">
+              <div class="flex items-center gap-1.5 flex-wrap text-[11px] font-mono justify-center">
+                <span class="text-xs font-sans text-slate-400 font-semibold mr-1">🎬 视频:</span>
+                <span class="px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-bold">FLV</span>
+                <span class="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium">MP4</span>
+                <span class="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium">MKV</span>
+                <span class="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium">MOV</span>
+                <span class="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium">WebM</span>
+                <span class="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium">AVI</span>
+                <span class="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium">TS</span>
+                <span class="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium">WMV</span>
+              </div>
+              <div class="flex items-center gap-1.5 flex-wrap text-[11px] font-mono justify-center">
+                <span class="text-xs font-sans text-slate-400 font-semibold mr-1">🎵 音频:</span>
+                <span class="px-2 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 font-medium">MP3</span>
+                <span class="px-2 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 font-medium">FLAC</span>
+                <span class="px-2 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 font-medium">WAV</span>
+                <span class="px-2 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 font-medium">AAC</span>
+                <span class="px-2 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 font-medium">OGG</span>
+                <span class="px-2 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 font-medium">M4A</span>
+                <span class="px-2 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 font-medium">OPUS</span>
+                <span class="px-2 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 font-medium">WMA</span>
+              </div>
+              <div class="flex items-center gap-1.5 flex-wrap text-[11px] font-mono justify-center">
+                <span class="text-xs font-sans text-slate-400 font-semibold mr-1">🖼️ 图像:</span>
+                <span class="px-2 py-0.5 rounded-full bg-pink-50 dark:bg-pink-950/50 text-pink-700 dark:text-pink-300 font-medium">JPEG / JPG</span>
+                <span class="px-2 py-0.5 rounded-full bg-pink-50 dark:bg-pink-950/50 text-pink-700 dark:text-pink-300 font-medium">PNG</span>
+                <span class="px-2 py-0.5 rounded-full bg-pink-50 dark:bg-pink-950/50 text-pink-700 dark:text-pink-300 font-medium">WebP</span>
+                <span class="px-2 py-0.5 rounded-full bg-pink-50 dark:bg-pink-950/50 text-pink-700 dark:text-pink-300 font-medium">GIF</span>
+                <span class="px-2 py-0.5 rounded-full bg-pink-50 dark:bg-pink-950/50 text-pink-700 dark:text-pink-300 font-medium">BMP</span>
+                <span class="px-2 py-0.5 rounded-full bg-pink-50 dark:bg-pink-950/50 text-pink-700 dark:text-pink-300 font-medium">TIFF</span>
+                <span class="px-2 py-0.5 rounded-full bg-pink-50 dark:bg-pink-950/50 text-pink-700 dark:text-pink-300 font-medium">HEIC / HEIF</span>
+                <span class="px-2 py-0.5 rounded-full bg-pink-50 dark:bg-pink-950/50 text-pink-700 dark:text-pink-300 font-medium">AVIF</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 处理加载状态条 -->
+      <section id="statusPanel" class="hidden bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm animate-pulse">
+        <div class="flex items-center space-x-4">
+          <div class="w-10 h-10 rounded-full border-4 border-indigo-200 border-t-indigo-600 dark:border-slate-700 dark:border-t-indigo-400 animate-spin flex-shrink-0"></div>
+          <div class="flex-1 min-w-0">
+            <h3 id="statusTitle" class="text-sm font-semibold text-slate-800 dark:text-slate-100">正在分析媒体文件...</h3>
+            <p id="statusDesc" class="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">首次运行需初始化 FFmpeg WebAssembly 核心，请稍候...</p>
+            <div class="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-1.5 mt-3 overflow-hidden">
+              <div id="statusBar" class="bg-gradient-to-r from-indigo-500 via-teal-400 to-emerald-400 h-1.5 rounded-full w-1/3 transition-all duration-300"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 结果展示主区域 (从上至下依次完整展现，无需 Tab 切换) -->
+      <div id="resultContainer" class="hidden space-y-8">
+        
+        <!-- 快速跳转浮动锚点导航条 (随滚动随时查看或直达) -->
+        <nav class="sticky top-16 z-30 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md p-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-md flex items-center justify-between gap-2 overflow-x-auto text-xs font-medium">
+          <div class="flex items-center space-x-1 sm:space-x-2 whitespace-nowrap">
+            <span class="text-slate-400 text-[11px] px-1 font-mono">⚡ 直达:</span>
+            <a href="#secPreview" class="px-2.5 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition">▶ 本地预览</a>
+            <a href="#secContainer" class="px-2.5 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition">📋 容器格式</a>
+            <a id="navJumpVideo" href="#secVideo" class="hidden px-2.5 py-1 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 transition">🎬 视频流</a>
+            <a id="navJumpAudio" href="#secAudio" class="hidden px-2.5 py-1 rounded-lg hover:bg-teal-50 dark:hover:bg-teal-950/60 text-teal-600 dark:text-teal-400 transition">🎵 音频流</a>
+            <a id="navJumpImage" href="#secImage" class="hidden px-2.5 py-1 rounded-lg hover:bg-pink-50 dark:hover:bg-pink-950/60 text-pink-600 dark:text-pink-400 transition">🖼️ 图像位图</a>
+            <a id="navJumpExif" href="#secExif" class="hidden px-2.5 py-1 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-950/60 text-amber-600 dark:text-amber-400 transition">📷 相机/EXIF/DPI</a>
+            <a id="navJumpSub" href="#secSubtitles" class="hidden px-2.5 py-1 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-950/60 text-purple-600 dark:text-purple-400 transition">💬 字幕章节</a>
+            <a href="#secMetadata" class="px-2.5 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition">🏷️ 元数据/EXIF</a>
+            <a href="#secRawLog" class="px-2.5 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition">💻 终端日志</a>
+            <a href="#secJson" class="px-2.5 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition">📦 JSON 结构</a>
+          </div>
+          <button id="btnScrollTop" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" title="回到顶部">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
+            </svg>
+          </button>
+        </nav>
+
+        <!-- 1. 文件基础摘要与快捷操作栏 -->
+        <section class="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200/90 dark:border-slate-700/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div class="flex items-center space-x-4 min-w-0">
+            <div id="mediaTypeBadgeIcon" class="w-12 h-12 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center flex-shrink-0 text-2xl">
+              🎬
+            </div>
+            <div class="min-w-0">
+              <div class="flex items-center space-x-2">
+                <h2 id="resFileName" class="text-lg sm:text-xl font-bold truncate text-slate-800 dark:text-slate-100">sample.mp4</h2>
+                <span id="resFileExtBadge" class="px-2 py-0.5 text-xs font-mono font-semibold rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300 uppercase">MP4</span>
+              </div>
+              <div class="flex flex-wrap items-center gap-y-1 gap-x-3 text-xs text-slate-500 dark:text-slate-400 mt-1">
+                <span>体积: <strong id="resFileSize" class="font-mono text-slate-700 dark:text-slate-200">0 MB</strong></span>
+                <span>•</span>
+                <span>时长/尺寸: <strong id="resDurationText" class="font-mono text-slate-700 dark:text-slate-200">00:00:00</strong></span>
+                <span>•</span>
+                <span>封装格式: <strong id="resContainerFormat" class="font-mono text-slate-700 dark:text-slate-200">mov,mp4</strong></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 导出 & 操作按钮组 -->
+          <div class="flex items-center flex-wrap gap-2">
+            <button id="btnCopySummary" class="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 flex items-center space-x-1.5 transition">
+              <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path>
+              </svg>
+              <span>复制摘要报告</span>
+            </button>
+            <button id="btnExportJson" class="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 flex items-center space-x-1.5 transition">
+              <svg class="w-4 h-4 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+              </svg>
+              <span>导出 JSON</span>
+            </button>
+            <button id="btnReUpload" class="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white flex items-center space-x-1.5 transition shadow-sm">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+              </svg>
+              <span>换个文件</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- 2. 核心指标速览卡片群 (自适应音视频与图片) -->
+        <section class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+          <!-- 容器格式 -->
+          <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between">
+            <span class="text-xs text-slate-500 dark:text-slate-400 font-medium">📦 格式 / 封装</span>
+            <div id="statFormat" class="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 truncate mt-1">-</div>
+            <span id="statFormatSub" class="text-[10px] text-slate-400 truncate mt-0.5">-</span>
+          </div>
+          <!-- 时长 / 帧数 -->
+          <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between">
+            <span id="statDurationTitle" class="text-xs text-slate-500 dark:text-slate-400 font-medium">⏱️ 媒体时长</span>
+            <div id="statDuration" class="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 font-mono mt-1">-</div>
+            <span id="statDurationSec" class="text-[10px] text-slate-400 font-mono mt-0.5">0.00 秒</span>
+          </div>
+          <!-- 码率 / 像素总数 -->
+          <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between">
+            <span id="statBitrateTitle" class="text-xs text-slate-500 dark:text-slate-400 font-medium">📶 总体码率</span>
+            <div id="statBitrate" class="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 font-mono mt-1">-</div>
+            <span id="statBitrateRate" class="text-[10px] text-slate-400 mt-0.5">-</span>
+          </div>
+          <!-- 视频或图像规格 -->
+          <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between">
+            <span id="statVisualTitle" class="text-xs text-slate-500 dark:text-slate-400 font-medium">🎬 画面规格</span>
+            <div id="statVisualCodec" class="text-sm sm:text-base font-bold text-indigo-600 dark:text-indigo-400 truncate mt-1">无视频</div>
+            <span id="statVisualRes" class="text-[10px] text-slate-400 font-mono truncate mt-0.5">-</span>
+          </div>
+          <!-- 音频规格 -->
+          <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between">
+            <span id="statAudioTitle" class="text-xs text-slate-500 dark:text-slate-400 font-medium">🎵 音频规格</span>
+            <div id="statAudioCodec" class="text-sm sm:text-base font-bold text-teal-600 dark:text-teal-400 truncate mt-1">无音频</div>
+            <span id="statAudioSpec" class="text-[10px] text-slate-400 font-mono truncate mt-0.5">-</span>
+          </div>
+          <!-- 流统计与构成 -->
+          <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between">
+            <span class="text-xs text-slate-500 dark:text-slate-400 font-medium">🗂️ 媒体流分布</span>
+            <div id="statStreamCount" class="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 mt-1">0 个流</div>
+            <span id="statStreamDetails" class="text-[10px] text-slate-400 truncate mt-0.5">-</span>
+          </div>
+        </section>
+
+        <!-- 3. 本地原生媒体预览区 (视频 / 音频动态频谱 / 图像) -->
+        <section id="secPreview" class="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700">
+            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+              <span>本地原生交互预览 (Native Media Preview)</span>
+              <span class="text-xs font-normal text-slate-400">（浏览器无损直接渲染，0 数据上传）</span>
+            </h3>
+            
+            <!-- 视频帧截图按钮 (仅在存在视频时可用) -->
+            <button id="btnCaptureSnapshot" class="hidden text-xs font-medium px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 dark:hover:bg-indigo-900 border border-indigo-200 dark:border-indigo-800 transition flex items-center space-x-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+              </svg>
+              <span>📸 截取当前视频帧</span>
+            </button>
+
+            <!-- 图像原图查看按钮 -->
+            <a id="btnDownloadImageDirect" download="image" class="hidden text-xs font-medium px-3 py-1.5 rounded-lg bg-pink-50 hover:bg-pink-100 text-pink-700 dark:bg-pink-950/60 dark:text-pink-300 dark:hover:bg-pink-900 border border-pink-200 dark:border-pink-800 transition flex items-center space-x-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+              </svg>
+              <span>保存原始图片</span>
+            </a>
+          </div>
+
+          <!-- 视频播放区域 -->
+          <div id="videoPreviewWrapper" class="hidden space-y-4">
+            <div class="bg-black/90 rounded-xl overflow-hidden max-h-[460px] flex items-center justify-center relative">
+              <video id="videoPlayer" class="w-full max-h-[460px] object-contain" controls playsinline></video>
+            </div>
+            <!-- 胶卷缩略图序列容器 -->
+            <div id="videoFilmstripContainer"></div>
+            <!-- 视频专业监视示波器容器 (亮度波形 / 直方图 / 矢量示波 / 运动矢量) -->
+            <div id="videoScopesContainer"></div>
+          </div>
+
+          <!-- 图像预览区域 (带透明棋盘底衬) -->
+          <div id="imagePreviewWrapper" class="hidden space-y-4">
+            <div class="checkerboard-bg rounded-xl overflow-hidden max-h-[500px] flex items-center justify-center p-4 border border-slate-200 dark:border-slate-700 relative">
+              <img id="imagePreview" class="max-h-[460px] object-contain w-auto h-auto rounded shadow-sm" alt="Preview Image" />
+              <div id="imageDimensionsBadge" class="absolute bottom-3 right-3 text-xs font-mono font-medium px-2.5 py-1 rounded-md bg-slate-900/80 text-white backdrop-blur">
+                0 × 0
+              </div>
+            </div>
+            <!-- 图像主要调色板与影调分析容器 -->
+            <div id="imagePaletteContainer"></div>
+            <!-- 专业图像示波器分析容器 (直方图 / 矢量示波图 / RGB分量图) -->
+            <div id="imageScopesContainer"></div>
+          </div>
+
+          <!-- 音频播放与实时动态频谱区域 -->
+          <div id="audioPreviewWrapper" class="hidden flex flex-col space-y-4">
+            <div class="w-full bg-slate-900 rounded-xl p-4 flex flex-col items-center justify-center relative overflow-hidden border border-slate-700">
+              <canvas id="visualizerCanvas" class="w-full h-32 rounded-lg"></canvas>
+              <div class="text-[11px] text-slate-400 mt-2 font-mono flex items-center space-x-2">
+                <span class="inline-block w-2 h-2 rounded-full bg-teal-400 animate-pulse"></span>
+                <span>播放音频时将呈现 Web Audio API 实时动态频谱柱</span>
+              </div>
+            </div>
+            <audio id="audioPlayer" class="w-full" controls></audio>
+            <!-- 全局交互式声波图容器 -->
+            <div id="audioWaveformContainer"></div>
+            <!-- 音频声学质检面板容器 -->
+            <div id="audioHealthContainer"></div>
+          </div>
+
+          <!-- 浏览器不支持直接解码特定编码画面时的提示 -->
+          <div id="noDirectPreviewTip" class="hidden p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 text-xs flex items-center space-x-2">
+            <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+            </svg>
+            <span>浏览器原生暂不支持该格式编码的画面直接播放渲染，但 FFmpeg.wasm 底层已完整解析并提取了其全部参数！</span>
+          </div>
+        </section>
+
+        <!-- 4. 容器与文件属性 (Container Properties) -->
+        <section id="secContainer" class="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm space-y-6">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700">
+            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+              <span>1. 文件与容器属性 (Container Properties)</span>
+            </h3>
+            <span class="text-xs text-slate-400 font-mono">Input #0 Demuxer</span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- 基础容器表格 -->
+            <div class="space-y-3 text-xs sm:text-sm">
+              <div class="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-700/60">
+                <span class="text-slate-500 dark:text-slate-400">完整文件名</span>
+                <span id="rowFileName" class="font-mono font-medium text-slate-800 dark:text-slate-200 truncate max-w-[260px]">-</span>
+              </div>
+              <div class="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-700/60">
+                <span class="text-slate-500 dark:text-slate-400">精准文件大小</span>
+                <span id="rowFileSize" class="font-mono font-medium text-slate-800 dark:text-slate-200">-</span>
+              </div>
+              <div class="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-700/60">
+                <span class="text-slate-500 dark:text-slate-400">容器封装名称</span>
+                <span id="rowContainer" class="font-mono font-medium text-indigo-600 dark:text-indigo-400">-</span>
+              </div>
+              <div class="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-700/60">
+                <span class="text-slate-500 dark:text-slate-400">媒体播放总时长</span>
+                <span id="rowDuration" class="font-mono font-medium text-slate-800 dark:text-slate-200">-</span>
+              </div>
+              <div class="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-700/60">
+                <span class="text-slate-500 dark:text-slate-400">总体比特率</span>
+                <span id="rowBitrate" class="font-mono font-medium text-slate-800 dark:text-slate-200">-</span>
+              </div>
+              <div class="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-700/60">
+                <span class="text-slate-500 dark:text-slate-400">起始时间戳 (Start Time)</span>
+                <span id="rowStartTime" class="font-mono font-medium text-slate-800 dark:text-slate-200">-</span>
+              </div>
+              <div class="flex justify-between py-1.5">
+                <span class="text-slate-500 dark:text-slate-400">估算存储消耗率</span>
+                <span id="rowStorageRate" class="font-mono font-medium text-slate-800 dark:text-slate-200">-</span>
+              </div>
+            </div>
+
+            <!-- 轨道分布简报卡片 -->
+            <div class="bg-slate-50 dark:bg-slate-900/40 rounded-xl p-4 border border-slate-100 dark:border-slate-700/60 flex flex-col justify-between">
+              <div>
+                <span class="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-3">媒体流构成速览 (Streams Summary)</span>
+                <div id="overviewStreamsSummary" class="space-y-2.5 text-xs">
+                  <div class="text-slate-400">暂无流信息</div>
+                </div>
+              </div>
+              <div class="mt-4 pt-3 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between text-xs text-slate-500">
+                <span>支持一键生成文本诊断简报</span>
+                <button id="btnQuickCopyReport" class="text-indigo-600 dark:text-indigo-400 hover:underline font-medium">复制完整参数简报 →</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 5. 图像流与位图规格 (Image Stream Properties - 仅在图像格式时显示) -->
+        <section id="secImage" class="hidden bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm space-y-6">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700">
+            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-pink-500"></span>
+              <span>2. 图像流与位图规格 (Image Stream Specs)</span>
+            </h3>
+            <span class="text-xs font-mono text-pink-500 bg-pink-50 dark:bg-pink-950/60 px-2 py-0.5 rounded font-bold">Image Mode</span>
+          </div>
+
+          <div id="imageSpecsList" class="space-y-4">
+            <!-- 动态注入图像参数卡片 -->
+          </div>
+        </section>
+
+        <!-- 5.1 相机硬件装备、摄影参数与物理分辨率 (Camera, EXIF & DPI) -->
+        <section id="secExif" class="hidden bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm space-y-6">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700">
+            <div class="flex items-center space-x-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+              <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">
+                2.1 摄影设备、光学曝光与物理分辨率 (Camera Gear, EXIF & DPI)
+              </h3>
+              <span id="badgeExifTagCount" class="text-xs font-mono px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 font-bold">0 Tags</span>
+            </div>
+            <span class="text-xs font-mono text-slate-400">APP1 EXIF / JFIF / TIFF 深度探测</span>
+          </div>
+
+          <div id="exifContentWrapper" class="space-y-6">
+            <!-- 动态渲染摄影 Bento Grid 卡片 -->
+          </div>
+        </section>
+
+        <!-- 6. 视频流详细参数 (Video Streams - 仅在存在视频流时显示) -->
+        <section id="secVideo" class="hidden bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm space-y-6">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700">
+            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+              <span>3. 视频流详细参数 (Video Streams)</span>
+              <span id="badgeVideoCount" class="text-xs font-mono px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">0</span>
+            </h3>
+            <span class="text-xs font-mono text-slate-400">H.264 / HEVC / VP9 / AV1 / FLV 等</span>
+          </div>
+
+          <div id="videoStreamsList" class="space-y-4">
+            <!-- 动态注入视频流卡片 -->
+          </div>
+        </section>
+
+        <!-- 7. 音频流详细参数 (Audio Streams - 仅在存在音频流时显示) -->
+        <section id="secAudio" class="hidden bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm space-y-6">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700">
+            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-teal-500"></span>
+              <span>4. 音频流详细参数 (Audio Streams)</span>
+              <span id="badgeAudioCount" class="text-xs font-mono px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300">0</span>
+            </h3>
+            <span class="text-xs font-mono text-slate-400">AAC / MP3 / FLAC / Opus / PCM 等</span>
+          </div>
+
+          <div id="audioStreamsList" class="space-y-4">
+            <!-- 动态注入音频流卡片 -->
+          </div>
+        </section>
+
+        <!-- 8. 字幕与章节标记 (Subtitles & Chapters - 仅在存在时显示) -->
+        <section id="secSubtitles" class="hidden bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm space-y-6">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700">
+            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
+              <span>5. 字幕与章节标记 (Subtitles & Chapters)</span>
+            </h3>
+            <span class="text-xs font-mono text-slate-400">SRT / ASS / mov_text / Chapters</span>
+          </div>
+
+          <!-- 字幕列表 -->
+          <div>
+            <h4 class="text-xs font-bold text-slate-600 dark:text-slate-300 mb-3 flex items-center space-x-1.5">
+              <span>💬 字幕轨道 (Subtitles)</span>
+            </h4>
+            <div id="subtitlesList" class="space-y-2">
+              <div class="text-xs text-slate-400 py-2">无内嵌字幕轨道</div>
+            </div>
+          </div>
+
+          <!-- 章节列表 -->
+          <div class="pt-4 border-t border-slate-100 dark:border-slate-700">
+            <h4 class="text-xs font-bold text-slate-600 dark:text-slate-300 mb-3 flex items-center space-x-1.5">
+              <span>🔖 章节标记 (Chapters)</span>
+            </h4>
+            <div id="chaptersList" class="overflow-x-auto">
+              <div class="text-xs text-slate-400 py-2">无章节标记</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 9. 完整元数据与 EXIF 标签清单 (Metadata & EXIF Tags) -->
+        <section id="secMetadata" class="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-700">
+            <div class="flex items-center space-x-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+              <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">
+                6. 完整元数据与 EXIF 标签清单 (Metadata & EXIF Tags)
+              </h3>
+              <span id="badgeMetaCount" class="text-xs font-mono px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300">0</span>
+            </div>
+            <div class="relative w-full sm:w-72">
+              <input type="text" id="metaSearchInput" placeholder="实时搜索标签名或属性值..." class="w-full text-xs px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-700/60 border border-slate-200 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-slate-200" />
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs sm:text-sm">
+              <thead>
+                <tr class="border-b border-slate-200 dark:border-slate-700 text-slate-400 font-medium">
+                  <th class="py-2.5 px-3">归属作用域</th>
+                  <th class="py-2.5 px-3">标签键 (Key)</th>
+                  <th class="py-2.5 px-3">属性值 (Value)</th>
+                  <th class="py-2.5 px-3 text-right">操作</th>
+                </tr>
+              </thead>
+              <tbody id="metadataTableBody" class="divide-y divide-slate-100 dark:divide-slate-700/60 font-mono">
+                <tr><td colspan="4" class="py-6 text-center text-slate-400">正在分析标签数据...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- 10. 终端原始控制台日志 (Raw Console Stderr Log) -->
+        <section id="secRawLog" class="bg-slate-900 rounded-2xl p-4 sm:p-6 border border-slate-800 shadow-xl space-y-3">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+            <div class="flex items-center space-x-2">
+              <div class="flex space-x-1.5">
+                <span class="w-3 h-3 rounded-full bg-rose-500/80 inline-block"></span>
+                <span class="w-3 h-3 rounded-full bg-amber-500/80 inline-block"></span>
+                <span class="w-3 h-3 rounded-full bg-emerald-500/80 inline-block"></span>
+              </div>
+              <h3 class="text-xs font-mono font-bold text-slate-300 ml-2">7. FFmpeg 终端原始诊断日志 (stderr output)</h3>
+            </div>
+            <div class="flex items-center space-x-2">
+              <input type="text" id="logFilterInput" placeholder="过滤关键字 (如 Video, Input)..." class="text-xs px-2.5 py-1 rounded bg-slate-800 text-slate-200 border border-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
+              <button id="btnCopyRawLog" class="px-2.5 py-1 rounded text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition flex items-center space-x-1">
+                <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"></path>
+                </svg>
+                <span>复制完整日志</span>
+              </button>
+            </div>
+          </div>
+          <pre id="rawLogBox" class="text-xs font-mono text-slate-300 whitespace-pre-wrap break-all max-h-[460px] overflow-y-auto leading-relaxed scrollbar-thin">等待分析...</pre>
+        </section>
+
+        <!-- 11. 标准 ffprobe JSON 结构体 (Compatible JSON Output) -->
+        <section id="secJson" class="bg-slate-900 rounded-2xl p-4 sm:p-6 border border-slate-800 shadow-xl space-y-3">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+            <h3 class="text-xs font-mono font-bold text-teal-400">8. 标准 ffprobe JSON 结构体 (ffprobe -print_format json)</h3>
+            <div class="flex items-center space-x-2">
+              <button id="btnCopyJsonDirect" class="px-2.5 py-1 rounded text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition flex items-center space-x-1">
+                <svg class="w-3.5 h-3.5 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path>
+                </svg>
+                <span>复制 JSON</span>
+              </button>
+              <button id="btnDownloadJsonFile" class="px-2.5 py-1 rounded text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition flex items-center space-x-1">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                </svg>
+                <span>下载 .json 文件</span>
+              </button>
+            </div>
+          </div>
+          <pre id="jsonViewerBox" class="text-xs font-mono text-teal-300 whitespace-pre overflow-x-auto max-h-[460px] overflow-y-auto leading-relaxed">{}</pre>
+        </section>
+
+      </div>
+
+    </main>
+
+    <!-- 视频截图弹窗 Modal -->
+    <div id="snapshotModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4">
+      <div class="bg-white dark:bg-slate-800 rounded-2xl max-w-3xl w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-700 animate-fadeIn">
+        <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-100 dark:border-slate-700">
+          <h3 class="font-bold text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+            <span>📸 视频高清原画帧抓取</span>
+            <span id="snapshotResolutionBadge" class="text-xs font-mono px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300">-</span>
+          </h3>
+          <button id="btnCloseSnapshotModal" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+        <div class="bg-black/90 rounded-xl overflow-hidden max-h-[460px] flex items-center justify-center mb-4">
+          <img id="snapshotImg" class="max-h-[460px] object-contain w-auto h-auto" src="" alt="Snapshot" />
+        </div>
+        <div class="flex justify-end space-x-3">
+          <button id="btnCloseSnapshotBtn" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 transition">
+            关闭
+          </button>
+          <a id="btnDownloadSnapshot" download="snapshot.png" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white flex items-center space-x-1.5 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+            </svg>
+            <span>保存高清图像</span>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- 浮动通知 Toast -->
+    <div id="toast" class="fixed bottom-6 right-6 z-50 transform translate-y-12 opacity-0 pointer-events-none transition-all duration-300 bg-slate-900 text-white px-4 py-2.5 rounded-xl shadow-2xl flex items-center space-x-2 text-xs sm:text-sm border border-slate-700">
+      <span id="toastIcon" class="text-teal-400 font-bold">✓</span>
+      <span id="toastMsg">操作成功</span>
+    </div>
+
+    <!-- 页脚版权 -->
+    <footer class="mt-auto border-t border-slate-200 dark:border-slate-800/80 py-6 text-center text-xs text-slate-400">
+      <p>&copy; 2026 AI Gen Tools Collection · FFmpeg WebAssembly (v0.12.7) · 音视频与图像全格式纯本地解析</p>
+    </footer>
+
+    <!-- 业务逻辑脚本 (ES Module) -->
+    <script type="module">
+      import { FFmpeg } from './assets/@ffmpeg/ffmpeg@0.12.7/dist/esm/index.js';
+      import { fetchFile, toBlobURL } from './assets/@ffmpeg/util@0.12.1/dist/esm/index.js';
+      import {
+        analyzeAudioBuffer,
+        mountWaveformViewer,
+        renderAudioHealthCard,
+        extractImagePaletteAndTone,
+        renderImageScopes,
+        generateVideoFilmstrip,
+        mountVideoScopes,
+      } from './media-analyzer.js';
+
+      // --- 全局状态与实例 ---
+      const ffmpeg = new FFmpeg();
+      let isFFmpegLoaded = false;
+      let currentFile = null;
+      let currentParsedData = null;
+      let rawLogLines = [];
+
+      // Audio Visualizer 状态
+      let audioCtx = null;
+      let analyser = null;
+      let audioSource = null;
+      let visualizerAnimId = null;
+
+      // 图像扩展名识别集
+      const imageExtensions = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'tiff', 'tif', 'heic', 'heif', 'avif', 'ico', 'svg', 'apng', 'tga', 'ppm', 'pnm'];
+
+      // --- DOM 元素引用 ---
+      const ui = {
+        themeToggle: document.getElementById('themeToggle'),
+        dropZone: document.getElementById('dropZone'),
+        mediaInput: document.getElementById('mediaInput'),
+        statusPanel: document.getElementById('statusPanel'),
+        statusTitle: document.getElementById('statusTitle'),
+        statusDesc: document.getElementById('statusDesc'),
+        statusBar: document.getElementById('statusBar'),
+        resultContainer: document.getElementById('resultContainer'),
+        btnScrollTop: document.getElementById('btnScrollTop'),
+
+        // 导航锚点
+        navJumpVideo: document.getElementById('navJumpVideo'),
+        navJumpAudio: document.getElementById('navJumpAudio'),
+        navJumpImage: document.getElementById('navJumpImage'),
+        navJumpExif: document.getElementById('navJumpExif'),
+        navJumpSub: document.getElementById('navJumpSub'),
+
+        // 头部摘要
+        resFileName: document.getElementById('resFileName'),
+        resFileExtBadge: document.getElementById('resFileExtBadge'),
+        resFileSize: document.getElementById('resFileSize'),
+        resDurationText: document.getElementById('resDurationText'),
+        resContainerFormat: document.getElementById('resContainerFormat'),
+        mediaTypeBadgeIcon: document.getElementById('mediaTypeBadgeIcon'),
+
+        // 指标卡片
+        statFormat: document.getElementById('statFormat'),
+        statFormatSub: document.getElementById('statFormatSub'),
+        statDurationTitle: document.getElementById('statDurationTitle'),
+        statDuration: document.getElementById('statDuration'),
+        statDurationSec: document.getElementById('statDurationSec'),
+        statBitrateTitle: document.getElementById('statBitrateTitle'),
+        statBitrate: document.getElementById('statBitrate'),
+        statBitrateRate: document.getElementById('statBitrateRate'),
+        statVisualTitle: document.getElementById('statVisualTitle'),
+        statVisualCodec: document.getElementById('statVisualCodec'),
+        statVisualRes: document.getElementById('statVisualRes'),
+        statAudioTitle: document.getElementById('statAudioTitle'),
+        statAudioCodec: document.getElementById('statAudioCodec'),
+        statAudioSpec: document.getElementById('statAudioSpec'),
+        statStreamCount: document.getElementById('statStreamCount'),
+        statStreamDetails: document.getElementById('statStreamDetails'),
+
+        // 预览区容器
+        videoPreviewWrapper: document.getElementById('videoPreviewWrapper'),
+        audioPreviewWrapper: document.getElementById('audioPreviewWrapper'),
+        imagePreviewWrapper: document.getElementById('imagePreviewWrapper'),
+        videoPlayer: document.getElementById('videoPlayer'),
+        audioPlayer: document.getElementById('audioPlayer'),
+        imagePreview: document.getElementById('imagePreview'),
+        imageDimensionsBadge: document.getElementById('imageDimensionsBadge'),
+        visualizerCanvas: document.getElementById('visualizerCanvas'),
+        btnCaptureSnapshot: document.getElementById('btnCaptureSnapshot'),
+        btnDownloadImageDirect: document.getElementById('btnDownloadImageDirect'),
+        noDirectPreviewTip: document.getElementById('noDirectPreviewTip'),
+
+        // 容器段
+        rowFileName: document.getElementById('rowFileName'),
+        rowFileSize: document.getElementById('rowFileSize'),
+        rowContainer: document.getElementById('rowContainer'),
+        rowDuration: document.getElementById('rowDuration'),
+        rowBitrate: document.getElementById('rowBitrate'),
+        rowStartTime: document.getElementById('rowStartTime'),
+        rowStorageRate: document.getElementById('rowStorageRate'),
+        overviewStreamsSummary: document.getElementById('overviewStreamsSummary'),
+
+        // 分区 Sections
+        secImage: document.getElementById('secImage'),
+        imageSpecsList: document.getElementById('imageSpecsList'),
+        secExif: document.getElementById('secExif'),
+        badgeExifTagCount: document.getElementById('badgeExifTagCount'),
+        exifContentWrapper: document.getElementById('exifContentWrapper'),
+        secVideo: document.getElementById('secVideo'),
+        videoStreamsList: document.getElementById('videoStreamsList'),
+        badgeVideoCount: document.getElementById('badgeVideoCount'),
+        secAudio: document.getElementById('secAudio'),
+        audioStreamsList: document.getElementById('audioStreamsList'),
+        badgeAudioCount: document.getElementById('badgeAudioCount'),
+        secSubtitles: document.getElementById('secSubtitles'),
+        subtitlesList: document.getElementById('subtitlesList'),
+        chaptersList: document.getElementById('chaptersList'),
+        metadataTableBody: document.getElementById('metadataTableBody'),
+        metaSearchInput: document.getElementById('metaSearchInput'),
+        badgeMetaCount: document.getElementById('badgeMetaCount'),
+
+        // 原始日志与 JSON
+        rawLogBox: document.getElementById('rawLogBox'),
+        logFilterInput: document.getElementById('logFilterInput'),
+        jsonViewerBox: document.getElementById('jsonViewerBox'),
+
+        // 按钮
+        btnCopySummary: document.getElementById('btnCopySummary'),
+        btnExportJson: document.getElementById('btnExportJson'),
+        btnQuickCopyReport: document.getElementById('btnQuickCopyReport'),
+        btnCopyRawLog: document.getElementById('btnCopyRawLog'),
+        btnCopyJsonDirect: document.getElementById('btnCopyJsonDirect'),
+        btnDownloadJsonFile: document.getElementById('btnDownloadJsonFile'),
+        btnReUpload: document.getElementById('btnReUpload'),
+        videoFilmstripContainer: document.getElementById('videoFilmstripContainer'),
+        videoScopesContainer: document.getElementById('videoScopesContainer'),
+        imagePaletteContainer: document.getElementById('imagePaletteContainer'),
+        imageScopesContainer: document.getElementById('imageScopesContainer'),
+        audioWaveformContainer: document.getElementById('audioWaveformContainer'),
+        audioHealthContainer: document.getElementById('audioHealthContainer'),
+
+
+        // 弹窗
+        snapshotModal: document.getElementById('snapshotModal'),
+        snapshotImg: document.getElementById('snapshotImg'),
+        snapshotResolutionBadge: document.getElementById('snapshotResolutionBadge'),
+        btnDownloadSnapshot: document.getElementById('btnDownloadSnapshot'),
+        btnCloseSnapshotModal: document.getElementById('btnCloseSnapshotModal'),
+        btnCloseSnapshotBtn: document.getElementById('btnCloseSnapshotBtn'),
+
+        // Toast
+        toast: document.getElementById('toast'),
+        toastMsg: document.getElementById('toastMsg'),
+      };
+
+      // --- 主题切换处理 ---
+      ui.themeToggle.addEventListener('click', () => {
+        const isDark = document.documentElement.classList.contains('dark');
+        if (isDark) {
+          document.documentElement.classList.remove('dark');
+          localStorage.theme = 'light';
+        } else {
+          document.documentElement.classList.add('dark');
+          localStorage.theme = 'dark';
+        }
+      });
+
+      // 回到顶部
+      ui.btnScrollTop.addEventListener('click', () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+
+      // --- Toast 弹窗通知 ---
+      function showToast(msg, isSuccess = true) {
+        ui.toastMsg.innerText = msg;
+        ui.toast.classList.remove('translate-y-12', 'opacity-0', 'pointer-events-none');
+        setTimeout(() => {
+          ui.toast.classList.add('translate-y-12', 'opacity-0', 'pointer-events-none');
+        }, 2500);
+      }
+
+      // --- 剪贴板复制工具 ---
+      async function copyToClipboard(text, successMsg = '已成功复制到剪贴板！') {
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+          } else {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+          }
+          showToast(successMsg);
+        } catch (e) {
+          console.error(e);
+          showToast('复制失败，请手动选择文本');
+        }
+      }
+
+      // --- 字节格式化工具 ---
+      function formatBytes(bytes) {
+        if (!bytes || bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+      }
+
+      // --- 格式化时长 (秒 -> HH:MM:SS.mmm) ---
+      function formatDuration(sec) {
+        if (!sec || isNaN(sec)) return '00:00:00';
+        const h = Math.floor(sec / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        const s = (sec % 60).toFixed(2);
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(5, '0')}`;
+      }
+
+      // --- 分辨率规格识别 (4K, 1080p, 720p...) ---
+      function getResolutionLabel(width, height) {
+        if (!width || !height) return '';
+        const minDim = Math.min(width, height);
+        const maxDim = Math.max(width, height);
+        if (maxDim >= 3840 || minDim >= 2160) return '4K UHD';
+        if (maxDim >= 2560 || minDim >= 1440) return '2K QHD';
+        if (maxDim >= 1920 || minDim >= 1080) return '1080p FHD';
+        if (maxDim >= 1280 || minDim >= 720) return '720p HD';
+        if (maxDim >= 854 || minDim >= 480) return '480p SD';
+        return `${width}×${height}`;
+      }
+
+      // --- 编码器与格式友好名称映射 ---
+      function getCodecFriendlyName(codec, type) {
+        if (!codec) return '未知编码';
+        const c = codec.toLowerCase();
+        const map = {
+          'h264': 'H.264 / AVC',
+          'avc1': 'H.264 / AVC (avc1)',
+          'hevc': 'H.265 / HEVC',
+          'hvc1': 'H.265 / HEVC (hvc1)',
+          'flv1': 'Flash Video (FLV1)',
+          'vp9': 'Google VP9',
+          'vp8': 'Google VP8',
+          'av1': 'AOMedia AV1',
+          'av01': 'AOMedia AV1',
+          'mjpeg': 'Motion JPEG',
+          'prores': 'Apple ProRes',
+          'mpeg4': 'MPEG-4 Visual',
+          'png': 'PNG (Portable Network Graphics)',
+          'webp': 'WebP Image',
+          'gif': 'GIF (Graphics Interchange Format)',
+          'bmp': 'BMP Bitmap',
+          'tiff': 'TIFF Image',
+          'heic': 'HEIC / High Efficiency Image',
+          'heif': 'HEIF Image',
+          'avif': 'AVIF Image',
+          'aac': 'Advanced Audio Coding (AAC)',
+          'mp3': 'MPEG Audio Layer III (MP3)',
+          'flac': 'Free Lossless Audio Codec (FLAC)',
+          'opus': 'Opus Interactive Audio',
+          'vorbis': 'Ogg Vorbis',
+          'pcm_s16le': '16-bit PCM (Linear)',
+          'pcm_s24le': '24-bit PCM (Linear)',
+          'ac3': 'Dolby Digital (AC-3)',
+          'eac3': 'Dolby Digital Plus (E-AC-3)',
+          'dts': 'DTS Coherent Acoustics',
+          'subrip': 'SubRip (SRT)',
+          'mov_text': 'QuickTime Text (tx3g)',
+          'ass': 'Advanced SubStation Alpha',
+          'ssa': 'SubStation Alpha',
+          'webvtt': 'WebVTT',
+        };
+        return map[c] || codec.toUpperCase();
+      }
+
+      // --- 判断文件多媒体类型 (image, video, audio) ---
+      function detectMediaType(parsed, file) {
+        const ext = file.name.split('.').pop().toLowerCase();
+        if (file.type.startsWith('image/') || imageExtensions.includes(ext)) {
+          return 'image';
+        }
+        if (parsed.video_streams.length > 0 && !parsed.video_streams[0].disposition.attached_pic) {
+          const v = parsed.video_streams[0];
+          // 如果只有单个极短视频流且编码为典型图片
+          if (['png', 'mjpeg', 'bmp', 'tiff', 'webp', 'heic', 'heif'].includes(v.codec_name) && 
+              parsed.format.duration_seconds <= 0.05 && 
+              parsed.audio_streams.length === 0) {
+            return 'image';
+          }
+          return 'video';
+        }
+        return 'audio';
+      }
+
+      // --- EXIF, JFIF 与图像摄影元数据高精度解析引擎 (纯前端毫秒级解析) ---
+      const EXIF_TAGS = {
+        0x0100: 'ImageWidth',
+        0x0101: 'ImageLength',
+        0x0102: 'BitsPerSample',
+        0x0103: 'Compression',
+        0x0106: 'PhotometricInterpretation',
+        0x010e: 'ImageDescription',
+        0x010f: 'Make',
+        0x0110: 'Model',
+        0x0111: 'StripOffsets',
+        0x0112: 'Orientation',
+        0x0115: 'SamplesPerPixel',
+        0x0116: 'RowsPerStrip',
+        0x0117: 'StripByteCounts',
+        0x011a: 'XResolution',
+        0x011b: 'YResolution',
+        0x011c: 'PlanarConfiguration',
+        0x0128: 'ResolutionUnit',
+        0x0131: 'Software',
+        0x0132: 'DateTime',
+        0x013b: 'Artist',
+        0x013e: 'WhitePoint',
+        0x013f: 'PrimaryChromaticities',
+        0x0211: 'YCbCrCoefficients',
+        0x0212: 'YCbCrSubSampling',
+        0x0213: 'YCbCrPositioning',
+        0x0214: 'ReferenceBlackWhite',
+        0x8298: 'Copyright',
+        0x8769: 'ExifIFDPointer',
+        0x8825: 'GPSInfoIFDPointer',
+        0x829a: 'ExposureTime',
+        0x829d: 'FNumber',
+        0x8822: 'ExposureProgram',
+        0x8824: 'SpectralSensitivity',
+        0x8827: 'ISOSpeedRatings',
+        0x8828: 'OECF',
+        0x8830: 'SensitivityType',
+        0x8832: 'RecommendedExposureIndex',
+        0x9000: 'ExifVersion',
+        0x9003: 'DateTimeOriginal',
+        0x9004: 'DateTimeDigitized',
+        0x9010: 'OffsetTime',
+        0x9011: 'OffsetTimeOriginal',
+        0x9012: 'OffsetTimeDigitized',
+        0x9101: 'ComponentsConfiguration',
+        0x9102: 'CompressedBitsPerPixel',
+        0x9201: 'ShutterSpeedValue',
+        0x9202: 'ApertureValue',
+        0x9203: 'BrightnessValue',
+        0x9204: 'ExposureBiasValue',
+        0x9205: 'MaxApertureValue',
+        0x9206: 'SubjectDistance',
+        0x9207: 'MeteringMode',
+        0x9208: 'LightSource',
+        0x9209: 'Flash',
+        0x920a: 'FocalLength',
+        0x9214: 'SubjectArea',
+        0x927c: 'MakerNote',
+        0x9286: 'UserComment',
+        0x9290: 'SubSecTime',
+        0x9291: 'SubSecTimeOriginal',
+        0x9292: 'SubSecTimeDigitized',
+        0xa000: 'FlashpixVersion',
+        0xa001: 'ColorSpace',
+        0xa002: 'PixelXDimension',
+        0xa003: 'PixelYDimension',
+        0xa004: 'RelatedSoundFile',
+        0xa005: 'InteroperabilityIFDPointer',
+        0xa20e: 'FocalPlaneXResolution',
+        0xa20f: 'FocalPlaneYResolution',
+        0xa210: 'FocalPlaneResolutionUnit',
+        0xa214: 'SubjectLocation',
+        0xa215: 'ExposureIndex',
+        0xa217: 'SensingMethod',
+        0xa300: 'FileSource',
+        0xa301: 'SceneType',
+        0xa302: 'CFAPattern',
+        0xa401: 'CustomRendered',
+        0xa402: 'ExposureMode',
+        0xa403: 'WhiteBalance',
+        0xa404: 'DigitalZoomRatio',
+        0xa405: 'FocalLengthIn35mmFilm',
+        0xa406: 'SceneCaptureType',
+        0xa407: 'GainControl',
+        0xa408: 'Contrast',
+        0xa409: 'Saturation',
+        0xa40a: 'Sharpness',
+        0xa40c: 'SubjectDistanceRange',
+        0xa420: 'ImageUniqueID',
+        0xa430: 'CameraOwnerName',
+        0xa431: 'BodySerialNumber',
+        0xa432: 'LensSpecification',
+        0xa433: 'LensMake',
+        0xa434: 'LensModel',
+        0xa435: 'LensSerialNumber',
+      };
+
+      const GPS_TAGS = {
+        0x0000: 'GPSVersionID',
+        0x0001: 'GPSLatitudeRef',
+        0x0002: 'GPSLatitude',
+        0x0003: 'GPSLongitudeRef',
+        0x0004: 'GPSLongitude',
+        0x0005: 'GPSAltitudeRef',
+        0x0006: 'GPSAltitude',
+        0x0007: 'GPSTimeStamp',
+        0x0008: 'GPSSatellites',
+        0x0009: 'GPSStatus',
+        0x000a: 'GPSMeasureMode',
+        0x000b: 'GPSDOP',
+        0x000c: 'GPSSpeedRef',
+        0x000d: 'GPSSpeed',
+        0x000e: 'GPSTrackRef',
+        0x000f: 'GPSTrack',
+        0x0010: 'GPSImgDirectionRef',
+        0x0011: 'GPSImgDirection',
+        0x0012: 'GPSMapDatum',
+        0x0013: 'GPSDestLatitudeRef',
+        0x0014: 'GPSDestLatitude',
+        0x0015: 'GPSDestLongitudeRef',
+        0x0016: 'GPSDestLongitude',
+        0x0017: 'GPSDestBearingRef',
+        0x0018: 'GPSDestBearing',
+        0x0019: 'GPSDestDistanceRef',
+        0x001a: 'GPSDestDistance',
+        0x001b: 'GPSProcessingMethod',
+        0x001c: 'GPSAreaInformation',
+        0x001d: 'GPSDateStamp',
+        0x001e: 'GPSDifferential',
+      };
+
+      function formatExposureProgram(code) {
+        const map = {
+          0: '未定义',
+          1: '手动曝光 (Manual - M档)',
+          2: '程序自动 (Program AE - P档)',
+          3: '光圈优先 (Aperture Priority - Av/A档)',
+          4: '快门优先 (Shutter Priority - Tv/S档)',
+          5: '创意慢速 (景深优先)',
+          6: '运动模式 (高速快门优先)',
+          7: '人像模式 (大光圈背景虚化)',
+          8: '风景模式 (大景深锐利清晰)',
+        };
+        return map[code] || (code !== undefined ? `曝光模式 (${code})` : '标准自动');
+      }
+
+      function formatMeteringMode(code) {
+        const map = {
+          0: '未知测光',
+          1: '平均测光 (Average)',
+          2: '中央重点测光 (Center-weighted)',
+          3: '点测光 (Spot)',
+          4: '多点测光 (Multi-spot)',
+          5: '评价/多分区测光 (Multi-segment / Evaluative)',
+          6: '局部测光 (Partial)',
+          255: '其他测光',
+        };
+        return map[code] || (code !== undefined ? `测光模式 (${code})` : '评价测光');
+      }
+
+      function formatFlash(code) {
+        if (code === undefined || code === null) return '未记录';
+        const fired = (code & 1) !== 0;
+        return fired ? '开启 (闪光灯触发)' : '关闭 (未闪光)';
+      }
+
+      function formatOrientation(code) {
+        const map = {
+          1: '正常 (水平，0°)',
+          2: '水平镜像翻转',
+          3: '旋转 180°',
+          4: '垂直镜像翻转',
+          5: '顺时针 90° + 水平翻转',
+          6: '顺时针 90° (Right-Top)',
+          7: '逆时针 90° + 水平翻转',
+          8: '逆时针 90° / 顺时针 270° (竖向构图拍摄)',
+        };
+        return map[code] || (code !== undefined ? `方向代码 ${code}` : '标准水平');
+      }
+
+      function formatColorSpace(code) {
+        if (code === 1) return 'sRGB (标准色彩空间)';
+        if (code === 2) return 'Adobe RGB (广色域)';
+        if (code === 65535) return '未校准 / Display P3 广色域';
+        return code ? `色彩空间 (${code})` : '标准色彩空间';
+      }
+
+      // 纯前端二进制解析 EXIF / JFIF / PNG pHYs
+      function parseExifData(uint8Buf, file) {
+        const result = {
+          hasExif: false,
+          dpi: null,
+          camera: {},
+          exposure: {},
+          gps: null,
+          allTags: [],
+        };
+
+        const len = uint8Buf.length;
+
+        // 1. JPEG JFIF (APP0) & EXIF (APP1) 检查
+        if (uint8Buf[0] === 0xFF && uint8Buf[1] === 0xD8) {
+          let offset = 2;
+          while (offset < Math.min(len - 4, 131072)) {
+            if (uint8Buf[offset] !== 0xFF) break;
+            const marker = uint8Buf[offset + 1];
+            if (marker === 0xDA || marker === 0xD9) break; // SOS or EOI
+            const segLen = (uint8Buf[offset + 2] << 8) | uint8Buf[offset + 3];
+            if (segLen < 2) break;
+
+            if (marker === 0xE0) { // APP0 JFIF
+              const id = String.fromCharCode(...uint8Buf.slice(offset + 4, offset + 8));
+              if (id === 'JFIF') {
+                const units = uint8Buf[offset + 11];
+                const xDen = (uint8Buf[offset + 12] << 8) | uint8Buf[offset + 13];
+                const yDen = (uint8Buf[offset + 14] << 8) | uint8Buf[offset + 15];
+                if (units === 1 && xDen > 0) {
+                  result.dpi = { x: xDen, y: yDen, unit: 'DPI (点/英寸)', rawUnit: '英寸 (inches)', text: `${xDen} × ${yDen} DPI` };
+                } else if (units === 2 && xDen > 0) {
+                  const xDpi = Math.round(xDen * 2.54);
+                  const yDpi = Math.round(yDen * 2.54);
+                  result.dpi = { x: xDpi, y: yDpi, unit: 'DPI (由DPCM换算)', rawUnit: '厘米 (cm)', text: `${xDpi} × ${yDpi} DPI` };
+                }
+              }
+            } else if (marker === 0xE1) { // APP1 EXIF
+              const sig = String.fromCharCode(...uint8Buf.slice(offset + 4, offset + 8));
+              if (sig === 'Exif') {
+                result.hasExif = true;
+                const tiffSlice = uint8Buf.subarray(offset + 10, offset + 2 + segLen);
+                parseTiffBlock(tiffSlice, result);
+              }
+            }
+            offset += 2 + segLen;
+          }
+        }
+
+        // 2. PNG pHYs 块提取 (像素物理分辨率)
+        if (uint8Buf[1] === 0x50 && uint8Buf[2] === 0x4E && uint8Buf[3] === 0x47) { // "PNG"
+          let p = 8;
+          while (p < len - 12) {
+            const chunkLen = (uint8Buf[p] << 24) | (uint8Buf[p + 1] << 16) | (uint8Buf[p + 2] << 8) | uint8Buf[p + 3];
+            const type = String.fromCharCode(uint8Buf[p + 4], uint8Buf[p + 5], uint8Buf[p + 6], uint8Buf[p + 7]);
+            if (type === 'pHYs') {
+              const xPpm = (uint8Buf[p + 8] << 24) | (uint8Buf[p + 9] << 16) | (uint8Buf[p + 10] << 8) | uint8Buf[p + 11];
+              const yPpm = (uint8Buf[p + 12] << 24) | (uint8Buf[p + 13] << 16) | (uint8Buf[p + 14] << 8) | uint8Buf[p + 15];
+              const unit = uint8Buf[p + 16];
+              if (unit === 1 && xPpm > 0) {
+                const xDpi = Math.round(xPpm * 0.0254);
+                const yDpi = Math.round(yPpm * 0.0254);
+                result.dpi = { x: xDpi, y: yDpi, unit: 'DPI (点/英寸)', rawUnit: '米 (PPM)', text: `${xDpi} × ${yDpi} DPI` };
+              }
+              break;
+            } else if (type === 'eXIf') { // PNG eXIf 块
+              result.hasExif = true;
+              parseTiffBlock(uint8Buf.subarray(p + 8, p + 8 + chunkLen), result);
+            }
+            p += 12 + chunkLen;
+          }
+        }
+
+        // 3. TIFF 格式直接解析
+        if ((uint8Buf[0] === 0x49 && uint8Buf[1] === 0x49 && uint8Buf[2] === 0x2A && uint8Buf[3] === 0x00) ||
+            (uint8Buf[0] === 0x4D && uint8Buf[1] === 0x4D && uint8Buf[2] === 0x00 && uint8Buf[3] === 0x2A)) {
+          result.hasExif = true;
+          parseTiffBlock(uint8Buf, result);
+        }
+
+        // 4. WebP / HEIC / AVIF 等容器快速扫描 Exif\0\0 签名
+        if (!result.hasExif) {
+          const scanLimit = Math.min(len - 16, 65536);
+          for (let i = 0; i < scanLimit; i++) {
+            if (uint8Buf[i] === 0x45 && uint8Buf[i + 1] === 0x78 && uint8Buf[i + 2] === 0x69 && uint8Buf[i + 3] === 0x66 && uint8Buf[i + 4] === 0x00 && uint8Buf[i + 5] === 0x00) {
+              const tiffP = i + 6;
+              const isII = uint8Buf[tiffP] === 0x49 && uint8Buf[tiffP + 1] === 0x49;
+              const isMM = uint8Buf[tiffP] === 0x4D && uint8Buf[tiffP + 1] === 0x4D;
+              if (isII || isMM) {
+                result.hasExif = true;
+                parseTiffBlock(uint8Buf.subarray(tiffP), result);
+                break;
+              }
+            }
+          }
+        }
+
+        return result;
+      }
+
+      // TIFF / EXIF IFD 结构递归遍历器
+      function parseTiffBlock(buf, result) {
+        if (!buf || buf.length < 8) return;
+        const isLittle = buf[0] === 0x49 && buf[1] === 0x49; // 'II'
+        const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+
+        const read16 = (o) => (o + 2 <= buf.length) ? view.getUint16(o, isLittle) : 0;
+        const read32 = (o) => (o + 4 <= buf.length) ? view.getUint32(o, isLittle) : 0;
+        const readInt32 = (o) => (o + 4 <= buf.length) ? view.getInt32(o, isLittle) : 0;
+
+        function readVal(type, num, valOffset) {
+          if (type === 1) { // BYTE
+            return num === 1 ? buf[valOffset] : Array.from(buf.slice(valOffset, valOffset + num));
+          }
+          if (type === 2) { // ASCII
+            const strOffset = (num <= 4) ? valOffset : read32(valOffset);
+            if (strOffset + num > buf.length) return '';
+            let s = '';
+            for (let i = 0; i < num; i++) {
+              const code = buf[strOffset + i];
+              if (code === 0) break;
+              s += String.fromCharCode(code);
+            }
+            return s.trim();
+          }
+          if (type === 3) { // SHORT
+            if (num === 1) return read16(valOffset);
+            const base = (num * 2 > 4) ? read32(valOffset) : valOffset;
+            const arr = [];
+            for (let i = 0; i < num; i++) arr.push(read16(base + i * 2));
+            return arr;
+          }
+          if (type === 4) { // LONG
+            if (num === 1) return read32(valOffset);
+            const base = read32(valOffset);
+            const arr = [];
+            for (let i = 0; i < num; i++) arr.push(read32(base + i * 4));
+            return arr;
+          }
+          if (type === 5 || type === 10) { // RATIONAL / SRATIONAL
+            const ro = read32(valOffset);
+            const arr = [];
+            for (let i = 0; i < num; i++) {
+              const n = type === 5 ? read32(ro + i * 8) : readInt32(ro + i * 8);
+              const d = type === 5 ? read32(ro + i * 8 + 4) : readInt32(ro + i * 8 + 4);
+              arr.push(d !== 0 ? n / d : n);
+            }
+            return num === 1 ? arr[0] : arr;
+          }
+          return null;
+        }
+
+        function readIFD(ifdOffset, tagMap) {
+          if (!ifdOffset || ifdOffset + 2 > buf.length) return {};
+          const count = read16(ifdOffset);
+          let p = ifdOffset + 2;
+          const tags = {};
+          for (let i = 0; i < count; i++) {
+            if (p + 12 > buf.length) break;
+            const tag = read16(p);
+            const type = read16(p + 2);
+            const num = read32(p + 4);
+            const valOffset = p + 8;
+            const val = readVal(type, num, valOffset);
+            const name = (tagMap && tagMap[tag]) || EXIF_TAGS[tag] || ('Tag_0x' + tag.toString(16).padStart(4, '0'));
+            tags[name] = { tag, type, num, val, rawOffset: read32(valOffset) };
+            p += 12;
+          }
+          return tags;
+        }
+
+        const firstIFD = read32(4);
+        const ifd0 = readIFD(firstIFD, EXIF_TAGS);
+
+        let exifIFD = {};
+        if (ifd0['ExifIFDPointer']) {
+          exifIFD = readIFD(ifd0['ExifIFDPointer'].rawOffset, EXIF_TAGS);
+        }
+
+        let gpsIFD = {};
+        if (ifd0['GPSInfoIFDPointer']) {
+          gpsIFD = readIFD(ifd0['GPSInfoIFDPointer'].rawOffset, GPS_TAGS);
+        }
+
+        // 1. DPI
+        const xRes = ifd0['XResolution']?.val;
+        const yRes = ifd0['YResolution']?.val;
+        const resUnit = ifd0['ResolutionUnit']?.val;
+        if (xRes && yRes) {
+          const isCm = resUnit === 3;
+          const finalX = isCm ? Math.round(xRes * 2.54) : Math.round(xRes);
+          const finalY = isCm ? Math.round(yRes * 2.54) : Math.round(yRes);
+          result.dpi = {
+            x: finalX,
+            y: finalY,
+            unit: 'DPI (点/英寸)',
+            rawUnit: resUnit === 2 ? '英寸 (inches)' : resUnit === 3 ? '厘米 (cm)' : '无单位',
+            text: `${finalX} × ${finalY} DPI`,
+          };
+        }
+
+        // 2. Camera Gear
+        result.camera = {
+          make: ifd0['Make']?.val || null,
+          model: ifd0['Model']?.val || null,
+          lensModel: exifIFD['LensModel']?.val || null,
+          lensSpec: exifIFD['LensSpecification']?.val || null,
+          bodySerialNumber: exifIFD['BodySerialNumber']?.val || null,
+          software: ifd0['Software']?.val || null,
+          artist: ifd0['Artist']?.val || null,
+          copyright: ifd0['Copyright']?.val || null,
+          orientation: ifd0['Orientation']?.val || null,
+          orientationText: formatOrientation(ifd0['Orientation']?.val),
+        };
+
+        // 3. Exposure & Optics
+        const expTime = exifIFD['ExposureTime']?.val || null;
+        result.exposure = {
+          exposureTime: expTime,
+          exposureTimeFormatted: expTime ? (expTime < 1 ? `1/${Math.round(1 / expTime)}s` : `${expTime.toFixed(1)}s`) : null,
+          fNumber: exifIFD['FNumber']?.val || null,
+          iso: exifIFD['ISOSpeedRatings']?.val || null,
+          focalLength: exifIFD['FocalLength']?.val || null,
+          focalLength35mm: exifIFD['FocalLengthIn35mmFilm']?.val || null,
+          exposureProgram: exifIFD['ExposureProgram']?.val,
+          exposureProgramText: formatExposureProgram(exifIFD['ExposureProgram']?.val),
+          meteringMode: exifIFD['MeteringMode']?.val,
+          meteringModeText: formatMeteringMode(exifIFD['MeteringMode']?.val),
+          exposureBias: exifIFD['ExposureBiasValue']?.val !== undefined ? `${exifIFD['ExposureBiasValue']?.val > 0 ? '+' : ''}${exifIFD['ExposureBiasValue']?.val} EV` : null,
+          flash: exifIFD['Flash']?.val,
+          flashText: formatFlash(exifIFD['Flash']?.val),
+          whiteBalance: exifIFD['WhiteBalance']?.val,
+          whiteBalanceText: exifIFD['WhiteBalance']?.val === 1 ? '手动 (Manual)' : '自动 (Auto)',
+          colorSpace: exifIFD['ColorSpace']?.val,
+          colorSpaceText: formatColorSpace(exifIFD['ColorSpace']?.val),
+          dateTimeOriginal: exifIFD['DateTimeOriginal']?.val || ifd0['DateTime']?.val || null,
+          offsetTime: exifIFD['OffsetTimeOriginal']?.val || exifIFD['OffsetTime']?.val || null,
+          subSecTime: exifIFD['SubSecTimeOriginal']?.val || exifIFD['SubSecTime']?.val || null,
+        };
+
+        // 4. GPS
+        if (gpsIFD['GPSLatitude'] && gpsIFD['GPSLongitude']) {
+          const latRef = gpsIFD['GPSLatitudeRef']?.val || 'N';
+          const latVal = gpsIFD['GPSLatitude']?.val;
+          const lonRef = gpsIFD['GPSLongitudeRef']?.val || 'E';
+          const lonVal = gpsIFD['GPSLongitude']?.val;
+
+          if (Array.isArray(latVal) && Array.isArray(lonVal)) {
+            let lat = latVal[0] + latVal[1] / 60 + latVal[2] / 3600;
+            if (latRef === 'S') lat = -lat;
+            let lon = lonVal[0] + lonVal[1] / 60 + lonVal[2] / 3600;
+            if (lonRef === 'W') lon = -lon;
+
+            let alt = null;
+            if (gpsIFD['GPSAltitude']) {
+              const altVal = gpsIFD['GPSAltitude'].val;
+              const altRef = gpsIFD['GPSAltitudeRef']?.val || 0;
+              alt = (altRef === 1 ? -1 : 1) * altVal;
+            }
+
+            result.gps = {
+              latitude: lat,
+              longitude: lon,
+              latitudeDMS: `${Math.floor(latVal[0])}° ${Math.floor(latVal[1])}' ${latVal[2].toFixed(2)}" ${latRef}`,
+              longitudeDMS: `${Math.floor(lonVal[0])}° ${Math.floor(lonVal[1])}' ${lonVal[2].toFixed(2)}" ${lonRef}`,
+              altitude: alt,
+              altitudeFormatted: alt !== null ? `${alt.toFixed(1)} 米` : null,
+              timestamp: gpsIFD['GPSTimeStamp']?.val ? (Array.isArray(gpsIFD['GPSTimeStamp'].val) ? gpsIFD['GPSTimeStamp'].val.map(n => String(Math.floor(n)).padStart(2, '0')).join(':') + ' UTC' : String(gpsIFD['GPSTimeStamp'].val)) : null,
+            };
+          }
+        }
+
+        // 5. 将解析出的键值注入 allTags，供表格全局搜索
+        for (const [k, v] of Object.entries(ifd0)) {
+          if (k.endsWith('Pointer') || v.val === null || v.val === undefined || v.val === '') continue;
+          result.allTags.push({ scope: 'EXIF: IFD0 (主相机与图像)', key: k, value: String(v.val) });
+        }
+        for (const [k, v] of Object.entries(exifIFD)) {
+          if (k.endsWith('Pointer') || v.val === null || v.val === undefined || v.val === '') continue;
+          result.allTags.push({ scope: 'EXIF: SubIFD (摄影与曝光参数)', key: k, value: String(v.val) });
+        }
+        for (const [k, v] of Object.entries(gpsIFD)) {
+          if (v.val === null || v.val === undefined || v.val === '') continue;
+          result.allTags.push({ scope: 'EXIF: GPS (卫星定位与地理)', key: k, value: String(v.val) });
+        }
+      }
+
+      // --- FFmpeg WASM 核心初始化 (参考 audio-clip.html) ---
+      async function ensureFFmpegLoaded() {
+        if (isFFmpegLoaded && ffmpeg.loaded) return;
+
+        ui.statusPanel.classList.remove('hidden');
+        ui.statusTitle.innerText = '正在初始化 FFmpeg.wasm 核心组件...';
+        ui.statusDesc.innerText = '正在加载 WebAssembly 核心 (约 30MB)，首次加载需数秒...';
+        ui.statusBar.style.width = '35%';
+
+        // 统一监听 ffmpeg stderr 日志
+        ffmpeg.on('log', ({ message }) => {
+          rawLogLines.push(message);
+          appendRawLogLine(message);
+        });
+
+        const relCore = new URL('./assets/@ffmpeg/core@0.12.4/dist/esm/ffmpeg-core.js', import.meta.url).href;
+        const relWasm = new URL('./assets/@ffmpeg/core@0.12.4/dist/esm/ffmpeg-core.wasm', import.meta.url).href;
+
+        try {
+          await ffmpeg.load({
+            coreURL: relCore,
+            wasmURL: relWasm,
+          });
+          isFFmpegLoaded = true;
+        } catch (err1) {
+          console.warn('Relative path load failed, trying absolute root path...', err1);
+          try {
+            await ffmpeg.load({
+              coreURL: '/assets/@ffmpeg/core@0.12.4/dist/esm/ffmpeg-core.js',
+              wasmURL: '/assets/@ffmpeg/core@0.12.4/dist/esm/ffmpeg-core.wasm',
+            });
+            isFFmpegLoaded = true;
+          } catch (err2) {
+            console.warn('Root path load failed, trying toBlobURL...', err2);
+            const blobCore = await toBlobURL(relCore, 'text/javascript');
+            const blobWasm = await toBlobURL(relWasm, 'application/wasm');
+            await ffmpeg.load({
+              coreURL: blobCore,
+              wasmURL: blobWasm,
+            });
+            isFFmpegLoaded = true;
+          }
+        }
+
+        ui.statusBar.style.width = '70%';
+      }
+
+      // --- 解析 FFmpeg 日志与提取元数据的主函数 ---
+      function parseFFmpegLogs(logText, fileInfo, ffmetadataText = '') {
+        const result = {
+          format: {
+            filename: fileInfo.name || 'unknown',
+            size: fileInfo.size || 0,
+            size_formatted: formatBytes(fileInfo.size || 0),
+            format_name: '',
+            format_long_name: '',
+            duration: '00:00:00',
+            duration_seconds: 0,
+            start_time: '0.000000',
+            bit_rate: 'N/A',
+            bit_rate_bps: 0,
+            tags: {},
+          },
+          streams: [],
+          video_streams: [],
+          audio_streams: [],
+          subtitle_streams: [],
+          other_streams: [],
+          chapters: [],
+          rawLog: logText,
+        };
+
+        // 1. 若有 ffmetadata 优先解析 tags
+        if (ffmetadataText) {
+          const metaLines = ffmetadataText.split(/\r?\n/);
+          let metaSection = 'format';
+          for (const line of metaLines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith(';')) continue;
+            if (trimmed === '[STREAM]') {
+              metaSection = 'stream';
+              continue;
+            }
+            if (trimmed === '[CHAPTER]') {
+              metaSection = 'chapter';
+              continue;
+            }
+            const eqIdx = trimmed.indexOf('=');
+            if (eqIdx > 0) {
+              const k = trimmed.substring(0, eqIdx).trim();
+              const v = trimmed.substring(eqIdx + 1).trim();
+              if (metaSection === 'format' && !result.format.tags[k]) {
+                result.format.tags[k] = v;
+              }
+            }
+          }
+        }
+
+        // 2. 正则行解析
+        const lines = logText.split(/\r?\n/);
+        let currentTarget = null;
+        let currentStream = null;
+        let currentChapter = null;
+        const seenStreams = new Set();
+        const seenChapters = new Set();
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+
+          // 匹配输入格式: Input #0, mov,mp4 / image2 / png_pipe / flv 等
+          const inputMatch = line.match(/(?:^|\]\s*)Input #\d+,\s*([^,]+(?:,\s*[^,]+)*),\s*from\s*'(.*)':/);
+          if (inputMatch) {
+            result.format.format_name = inputMatch[1].trim();
+            currentTarget = 'format';
+            continue;
+          }
+
+          // 匹配输出边界: 当检测到 Output # 时，后续流属于转码输出而非源文件输入流
+          if (/(?:^|\]\s*)Output #\d+/i.test(line)) {
+            currentTarget = 'output';
+            continue;
+          }
+
+          // 匹配时长与码率: 支持含或不含 start: 的格式 (如 WAV/图片/FLV)
+          const durationMatch = line.match(/Duration:\s*(\d{2}:\d{2}:\d{2}(?:\.\d+)?|N\/A)(?:,\s*start:\s*([\d\.-]+|N\/A))?(?:,\s*bitrate:\s*(\d+\s*kb\/s|\w+))?/i);
+          if (durationMatch) {
+            result.format.duration = durationMatch[1];
+            if (durationMatch[1] !== 'N/A') {
+              const parts = durationMatch[1].split(':');
+              if (parts.length === 3) {
+                result.format.duration_seconds = parseFloat(parts[0]) * 3600 + parseFloat(parts[1]) * 60 + parseFloat(parts[2]);
+              }
+            }
+            result.format.start_time = durationMatch[2] || '0.000000';
+            result.format.bit_rate = durationMatch[3] || 'N/A';
+            const brNum = parseInt(result.format.bit_rate, 10);
+            if (!isNaN(brNum)) {
+              result.format.bit_rate_bps = brNum * 1000;
+            }
+            currentTarget = null;
+            continue;
+          }
+
+          // 匹配媒体流: Video / Audio / Subtitle 等
+          const streamMatch = line.match(/Stream #(\d+):(\d+)(?:\[0x[0-9a-fA-F]+\])?(?:\(([a-zA-Z0-9_-]+)\))?(?:\((.*?)\))?:\s*(Video|Audio|Subtitle|Attachment|Data):\s*(.*)/i);
+          if (streamMatch) {
+            // 忽略 Output # 下的转码流或映射流
+            if (currentTarget === 'output' || line.includes(' -> ')) continue;
+
+            const streamIdx = parseInt(streamMatch[2], 10);
+            const streamKey = `${streamMatch[1]}:${streamIdx}`;
+            if (seenStreams.has(streamKey)) continue;
+            seenStreams.add(streamKey);
+
+            const lang = streamMatch[3] || 'und';
+            const type = streamMatch[5].toLowerCase();
+            const rest = streamMatch[6].trim();
+
+            currentStream = {
+              index: streamIdx,
+              codec_type: type,
+              language: lang,
+              raw_info: rest,
+              codec_name: '',
+              codec_profile: '',
+              tags: {},
+              disposition: {
+                default: rest.includes('(default)') ? 1 : 0,
+                forced: rest.includes('(forced)') ? 1 : 0,
+                attached_pic: rest.includes('(attached pic)') ? 1 : 0,
+              },
+            };
+
+            // 提取 FourCC 编码标识 (如 avc1 / 0x31637661, mp4a / 0x6134706D)
+            const fourccMatch = rest.match(/\(\s*([a-zA-Z0-9_]{3,5})\s*\/\s*(0x[0-9a-fA-F]+)\s*\)/);
+            if (fourccMatch) {
+              currentStream.fourcc = fourccMatch[1];
+              currentStream.fourcc_hex = fourccMatch[2];
+            }
+
+            // 提取位深 (Bit Depth)
+            if (rest.includes('10le') || rest.includes('10-bit') || rest.includes('Main 10')) currentStream.bit_depth = '10-bit';
+            else if (rest.includes('12le') || rest.includes('12-bit')) currentStream.bit_depth = '12-bit';
+            else if (rest.includes('s16') || rest.includes('16-bit') || rest.includes('16 bit')) currentStream.bit_depth = '16-bit';
+            else if (rest.includes('s24') || rest.includes('24-bit') || rest.includes('24 bit')) currentStream.bit_depth = '24-bit';
+            else if (rest.includes('s32') || rest.includes('fltp') || rest.includes('32-bit')) currentStream.bit_depth = '32-bit (浮点)';
+            else if (type === 'video') currentStream.bit_depth = '8-bit';
+
+            // 提取色彩范围 (Color Range) 与 HDR
+            if (rest.includes('bt2020') || rest.includes('smpte2084') || rest.includes('arib-std-b67')) {
+              currentStream.hdr_info = 'HDR (广色域 / 高动态范围)';
+            }
+            if (rest.includes('(tv,') || rest.includes('tv/')) currentStream.color_range = '有限范围 (Limited / TV 16-235)';
+            else if (rest.includes('(pc,') || rest.includes('pc/')) currentStream.color_range = '全范围 (Full / PC 0-255)';
+
+            // 智能括号分块解析
+            const parts = [];
+            let buf = '';
+            let depth = 0;
+            for (const ch of rest) {
+              if (ch === '(' || ch === '[' || ch === '{') depth++;
+              else if (ch === ')' || ch === ']' || ch === '}') depth--;
+              if (ch === ',' && depth === 0) {
+                parts.push(buf.trim());
+                buf = '';
+              } else {
+                buf += ch;
+              }
+            }
+            if (buf.trim()) parts.push(buf.trim());
+
+            if (parts.length > 0) {
+              const codecPart = parts[0];
+              const codecNameMatch = codecPart.match(/^([^\s(]+)/);
+              if (codecNameMatch) currentStream.codec_name = codecNameMatch[1];
+              const profileMatch = codecPart.match(/\(([^()]+)\)/);
+              if (profileMatch && !profileMatch[1].includes('/')) {
+                currentStream.codec_profile = profileMatch[1];
+              }
+            }
+
+            // 根据类型细化提取
+            if (type === 'video') {
+              for (const p of parts) {
+                const resMatch = p.match(/\b(\d{2,5})x(\d{2,5})\b/);
+                if (resMatch && !currentStream.width) {
+                  currentStream.width = parseInt(resMatch[1], 10);
+                  currentStream.height = parseInt(resMatch[2], 10);
+                }
+                const pixMatch = p.match(/^([a-z0-9_]+)(?:\(([^()]+)\))?$/);
+                if (pixMatch && !currentStream.pix_fmt && (pixMatch[1].startsWith('yuv') || pixMatch[1].startsWith('rgb') || pixMatch[1].startsWith('bgr') || pixMatch[1].startsWith('nv') || pixMatch[1].startsWith('pal') || pixMatch[1].startsWith('gbr'))) {
+                  currentStream.pix_fmt = pixMatch[1];
+                  if (pixMatch[2]) currentStream.color_info = pixMatch[2];
+                }
+                const sarMatch = p.match(/\[SAR\s+([0-9:]+)\s+DAR\s+([0-9:]+)\]/i);
+                if (sarMatch) {
+                  currentStream.sar = sarMatch[1];
+                  currentStream.dar = sarMatch[2];
+                }
+                const fpsMatch = p.match(/([\d\.]+)\s+fps/i);
+                if (fpsMatch) currentStream.fps = parseFloat(fpsMatch[1]);
+                const tbrMatch = p.match(/([\d\.]+[kK]?)\s+tbr/i);
+                if (tbrMatch) currentStream.tbr = tbrMatch[1];
+                const tbnMatch = p.match(/([\d\.]+[kK]?)\s+tbn/i);
+                if (tbnMatch) currentStream.tbn = tbnMatch[1];
+                const brMatch = p.match(/(\d+)\s+kb\/s/i);
+                if (brMatch && !currentStream.bit_rate) currentStream.bit_rate = brMatch[1] + ' kb/s';
+              }
+              result.video_streams.push(currentStream);
+            } else if (type === 'audio') {
+              for (const p of parts) {
+                const hzMatch = p.match(/(\d+)\s+Hz/i);
+                if (hzMatch) currentStream.sample_rate = hzMatch[1] + ' Hz';
+                if (/\b(stereo|mono|5\.1\(side\)|5\.1|7\.1|\d+\s+channels?)\b/i.test(p)) {
+                  currentStream.channel_layout = p.replace(/\(default\)|\(forced\)/g, '').trim();
+                }
+                if (/^(fltp|s16p|s16|s32|s32p|s24|s24p|flt|u8|u8p|dbl|dblp)$/i.test(p)) {
+                  currentStream.sample_fmt = p;
+                }
+                const brMatch = p.match(/(\d+)\s+kb\/s/i);
+                if (brMatch && !currentStream.bit_rate) currentStream.bit_rate = brMatch[1] + ' kb/s';
+              }
+              result.audio_streams.push(currentStream);
+            } else if (type === 'subtitle') {
+              result.subtitle_streams.push(currentStream);
+            } else {
+              result.other_streams.push(currentStream);
+            }
+
+            result.streams.push(currentStream);
+            currentTarget = 'stream';
+            continue;
+          }
+
+          // 匹配章节信息
+          const chapterMatch = line.match(/Chapter #(\d+):(\d+):\s*start\s*([\d\.]+),\s*end\s*([\d\.]+)/i);
+          if (chapterMatch) {
+            const chapterKey = `${chapterMatch[1]}:${chapterMatch[2]}`;
+            if (seenChapters.has(chapterKey)) continue;
+            seenChapters.add(chapterKey);
+
+            currentChapter = {
+              id: parseInt(chapterMatch[2], 10),
+              start: parseFloat(chapterMatch[3]),
+              end: parseFloat(chapterMatch[4]),
+              duration: (parseFloat(chapterMatch[4]) - parseFloat(chapterMatch[3])).toFixed(3),
+              tags: {},
+            };
+            result.chapters.push(currentChapter);
+            currentTarget = 'chapter';
+            continue;
+          }
+
+          // Metadata 小节
+          if (/^\s*Metadata:\s*$/i.test(line)) {
+            const indent = line.search(/\S/);
+            if (indent <= 2 && !currentStream && !currentChapter) {
+              currentTarget = 'format_meta';
+            } else if (currentChapter) {
+              currentTarget = 'chapter_meta';
+            } else if (currentStream) {
+              currentTarget = 'stream_meta';
+            }
+            continue;
+          }
+
+          // 键值属性行: " title : ..." / " make : Apple"
+          const kvMatch = line.match(/^\s+([a-zA-Z0-9_\-\.]+)\s*:\s*(.*)$/);
+          if (kvMatch && currentTarget) {
+            const key = kvMatch[1].trim();
+            const val = kvMatch[2].trim();
+            if (currentTarget === 'format' || currentTarget === 'format_meta') {
+              result.format.tags[key] = val;
+            } else if (currentTarget === 'stream' || currentTarget === 'stream_meta') {
+              if (currentStream) currentStream.tags[key] = val;
+            } else if (currentTarget === 'chapter' || currentTarget === 'chapter_meta') {
+              if (currentChapter) currentChapter.tags[key] = val;
+            }
+          }
+        }
+
+        // 3. 流元数据后置增强提取 (如总帧数、轨道独立体积、旋转、轨道时长等)
+        result.streams.forEach(s => {
+          if (s.tags['NUMBER_OF_FRAMES']) s.total_frames = s.tags['NUMBER_OF_FRAMES'];
+          if (s.tags['NUMBER_OF_BYTES']) s.stream_size = formatBytes(parseInt(s.tags['NUMBER_OF_BYTES'], 10));
+          if (s.tags['rotate']) s.rotation = s.tags['rotate'] + '°';
+          if (s.tags['BPS']) s.bps_str = (parseInt(s.tags['BPS'], 10) / 1000).toFixed(0) + ' kb/s';
+          if (s.tags['DURATION'] && !s.duration_str) s.duration_str = s.tags['DURATION'].split('.')[0];
+        });
+
+        return result;
+      }
+
+      // --- 构建与 ffprobe -print_format json 等价的 JSON 对象 ---
+      function buildFFprobeJson(parsed) {
+        return {
+          format: {
+            filename: parsed.format.filename,
+            nb_streams: parsed.streams.length,
+            nb_programs: 0,
+            format_name: parsed.format.format_name,
+            format_long_name: parsed.format.format_long_name || parsed.format.format_name,
+            start_time: parsed.format.start_time,
+            duration: parsed.format.duration_seconds.toFixed(6),
+            size: String(parsed.format.size),
+            bit_rate: String(parsed.format.bit_rate_bps || ''),
+            tags: parsed.format.tags,
+          },
+          streams: parsed.streams.map(s => {
+            const obj = {
+              index: s.index,
+              codec_name: s.codec_name,
+              codec_long_name: getCodecFriendlyName(s.codec_name, s.codec_type),
+              profile: s.codec_profile || undefined,
+              codec_type: s.codec_type,
+              codec_tag_string: s.fourcc || undefined,
+              codec_tag: s.fourcc_hex || undefined,
+              disposition: s.disposition,
+              tags: s.tags,
+            };
+            if (s.codec_type === 'video') {
+              obj.width = s.width;
+              obj.height = s.height;
+              obj.sample_aspect_ratio = s.sar;
+              obj.display_aspect_ratio = s.dar;
+              obj.pix_fmt = s.pix_fmt;
+              obj.bits_per_raw_sample = s.bit_depth;
+              obj.color_range = s.color_range;
+              obj.r_frame_rate = s.fps ? `${s.fps}/1` : undefined;
+              obj.avg_frame_rate = s.fps ? `${s.fps}/1` : undefined;
+              obj.bit_rate = s.bit_rate;
+              if (s.total_frames) obj.nb_frames = s.total_frames;
+            } else if (s.codec_type === 'audio') {
+              obj.sample_rate = s.sample_rate ? s.sample_rate.replace(/\D/g, '') : undefined;
+              obj.channels = s.channel_layout && s.channel_layout.includes('stereo') ? 2 : 1;
+              obj.channel_layout = s.channel_layout;
+              obj.sample_fmt = s.sample_fmt;
+              obj.bits_per_sample = s.bit_depth;
+              obj.bit_rate = s.bit_rate;
+            }
+            return obj;
+          }),
+          chapters: parsed.chapters,
+        };
+        if (parsed.exif) {
+          out.exif = parsed.exif;
+        }
+        return out;
+      }
+
+      // --- 处理主流程 ---
+      async function processMediaFile(file) {
+        currentFile = file;
+        rawLogLines = [];
+        ui.rawLogBox.innerText = '正在运行 ffmpeg 探测任务...\n';
+
+        ui.dropZone.classList.add('opacity-50', 'pointer-events-none');
+        ui.statusPanel.classList.remove('hidden');
+        ui.resultContainer.classList.add('hidden');
+        ui.statusTitle.innerText = `正在分析: ${file.name}`;
+        ui.statusDesc.innerText = `文件大小: ${formatBytes(file.size)} · 正在写入虚拟文件系统...`;
+        ui.statusBar.style.width = '20%';
+
+        try {
+          // 0. 纯前端并行提取高精度 EXIF / DPI / 相机摄影参数
+          let exifData = null;
+          try {
+            const arrayBuf = await file.arrayBuffer();
+            exifData = parseExifData(new Uint8Array(arrayBuf), file);
+          } catch (e) {
+            console.warn('EXIF parse warning', e);
+          }
+
+          // 1. 初始化 WASM 核心
+          await ensureFFmpegLoaded();
+
+          // 2. 将文件写入虚拟文件系统
+          ui.statusTitle.innerText = '正在写入 FFmpeg 虚拟内存系统...';
+          ui.statusBar.style.width = '50%';
+          const ext = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : 'tmp';
+          const virtualFileName = `probe_input_${Date.now()}.${ext}`;
+
+          await ffmpeg.writeFile(virtualFileName, await fetchFile(file));
+
+          // 3. 执行探测命令: 优先通过 -f ffmetadata 触发 demuxer 完整输入探测并提取结构化元数据 (单次探测)
+          ui.statusTitle.innerText = '正在运行 FFprobe 级参数探针...';
+          ui.statusBar.style.width = '75%';
+
+          let ffmetadataStr = '';
+          try {
+            await ffmpeg.exec(['-i', virtualFileName, '-f', 'ffmetadata', 'meta.txt']);
+            try {
+              const metaBuf = await ffmpeg.readFile('meta.txt');
+              ffmetadataStr = new TextDecoder().decode(metaBuf);
+              await ffmpeg.deleteFile('meta.txt');
+            } catch (e) {}
+          } catch (e) {
+            // 若特殊格式不支持导出 ffmetadata 且尚未采集到探测日志，则回退为原生纯 -i 探测
+            if (rawLogLines.length === 0) {
+              try {
+                await ffmpeg.exec(['-i', virtualFileName]);
+              } catch (err) {}
+            }
+          }
+
+          // 4. 清理虚拟文件系统，释放浏览器内存
+          try {
+            await ffmpeg.deleteFile(virtualFileName);
+          } catch (e) {
+            console.warn('Virtual file cleanup warning', e);
+          }
+
+          ui.statusBar.style.width = '95%';
+          ui.statusTitle.innerText = '正在整理结构化媒体信息...';
+
+          // 5. 解析日志与合并 EXIF
+          const fullLogText = rawLogLines.join('\n');
+          const parsed = parseFFmpegLogs(fullLogText, file, ffmetadataStr);
+          parsed.exif = exifData;
+          if (exifData && exifData.allTags && exifData.allTags.length > 0) {
+            parsed.exifTags = exifData.allTags;
+          }
+          currentParsedData = parsed;
+
+          // 6. 渲染到垂直排列的 Dashboard
+          renderDashboard(parsed, file);
+
+          ui.statusBar.style.width = '100%';
+          setTimeout(() => {
+            ui.statusPanel.classList.add('hidden');
+            ui.resultContainer.classList.remove('hidden');
+            ui.dropZone.classList.remove('opacity-50', 'pointer-events-none');
+            // 自动平滑滚动到结果区域
+            ui.resultContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }, 300);
+
+        } catch (error) {
+          console.error(error);
+          ui.statusPanel.classList.remove('hidden');
+          ui.statusTitle.innerText = '解析媒体文件失败';
+          ui.statusDesc.innerText = `错误详情: ${error.message || error}`;
+          ui.statusBar.classList.add('bg-rose-500');
+          ui.dropZone.classList.remove('opacity-50', 'pointer-events-none');
+        }
+      }
+
+      // --- 渲染全部垂直排列内容 ---
+      function renderDashboard(data, file) {
+        const { format, video_streams, audio_streams, subtitle_streams, streams } = data;
+        const mediaType = detectMediaType(data, file);
+
+        // 1. 顶部基础属性
+        ui.resFileName.innerText = file.name;
+        ui.resFileExtBadge.innerText = file.name.split('.').pop() || 'FILE';
+        ui.resFileSize.innerText = format.size_formatted;
+        ui.resContainerFormat.innerText = format.format_name || '未知';
+
+        if (mediaType === 'image') {
+          ui.mediaTypeBadgeIcon.innerText = '🖼️';
+          const imgV = video_streams[0];
+          ui.resDurationText.innerText = imgV ? `${imgV.width}×${imgV.height}` : '图像文件';
+        } else if (mediaType === 'video') {
+          ui.mediaTypeBadgeIcon.innerText = '🎬';
+          ui.resDurationText.innerText = format.duration;
+        } else {
+          ui.mediaTypeBadgeIcon.innerText = '🎵';
+          ui.resDurationText.innerText = format.duration;
+        }
+
+        // 2. 指标卡片
+        ui.statFormat.innerText = (format.format_name || '未知').toUpperCase();
+        ui.statFormatSub.innerText = format.format_name.split(',')[0] || '';
+
+        if (mediaType === 'image') {
+          const imgV = video_streams[0] || {};
+          const ex = data.exif || {};
+
+          ui.statDurationTitle.innerText = '📐 图像尺寸';
+          ui.statDuration.innerText = imgV.width ? `${imgV.width} × ${imgV.height}` : '图片文件';
+          const mp = imgV.width && imgV.height ? (imgV.width * imgV.height / 1000000).toFixed(2) : '0';
+          ui.statDurationSec.innerText = `${mp} MP (${getResolutionLabel(imgV.width, imgV.height) || '百万像素'})`;
+
+          if (ex.dpi) {
+            ui.statBitrateTitle.innerText = '🖨️ 打印分辨率';
+            ui.statBitrate.innerText = ex.dpi.text;
+            ui.statBitrateRate.innerText = ex.dpi.unit || '点/英寸';
+          } else {
+            ui.statBitrateTitle.innerText = '🎨 色彩格式';
+            ui.statBitrate.innerText = imgV.pix_fmt || 'RGB';
+            ui.statBitrateRate.innerText = imgV.bit_depth || '8-bit';
+          }
+
+          if (ex.camera && (ex.camera.make || ex.camera.model)) {
+            ui.statVisualTitle.innerText = '📷 拍摄器材';
+            ui.statVisualCodec.innerText = [ex.camera.make, ex.camera.model].filter(Boolean).join(' ');
+            const lensStr = ex.camera.lensModel || (Array.isArray(ex.camera.lensSpec) ? `${ex.camera.lensSpec[0]}-${ex.camera.lensSpec[1]}mm` : '');
+            ui.statVisualRes.innerText = lensStr || (ex.camera.bodySerialNumber ? 'S/N: ' + ex.camera.bodySerialNumber : '原厂设备');
+          } else {
+            ui.statVisualTitle.innerText = '🖼️ 图像格式';
+            ui.statVisualCodec.innerText = getCodecFriendlyName(imgV.codec_name, 'video');
+            ui.statVisualRes.innerText = `${imgV.width}×${imgV.height} · ${imgV.sar || '1:1'}`;
+          }
+
+          if (ex.exposure && ex.exposure.exposureTimeFormatted) {
+            ui.statAudioTitle.innerText = '⚡ 曝光参数';
+            ui.statAudioCodec.innerText = `${ex.exposure.exposureTimeFormatted} · f/${ex.exposure.fNumber || '-'} · ISO ${ex.exposure.iso || '-'}`;
+            ui.statAudioSpec.innerText = `${ex.exposure.focalLength ? ex.exposure.focalLength + 'mm' : ''} · ${ex.exposure.exposureProgramText || '拍摄参数'}`;
+          } else {
+            ui.statAudioTitle.innerText = '🎞️ 帧属性';
+            ui.statAudioCodec.innerText = format.duration_seconds > 0.1 ? '动图 (Animated)' : '单帧静态图';
+            ui.statAudioSpec.innerText = format.duration_seconds > 0.1 ? `${format.duration_seconds.toFixed(2)}s 时长` : '无伴音';
+          }
+
+          if (ex.exposure && ex.exposure.dateTimeOriginal) {
+            ui.statStreamCount.innerText = ex.exposure.dateTimeOriginal.split(' ')[0].replace(/:/g, '-');
+            ui.statStreamDetails.innerText = ex.exposure.dateTimeOriginal.split(' ')[1] + (ex.exposure.offsetTime ? ' ' + ex.exposure.offsetTime : '');
+          } else {
+            ui.statStreamCount.innerText = '单幅图像';
+            ui.statStreamDetails.innerText = `${imgV.pix_fmt || 'RGBA'} · ${imgV.bit_depth || '8-bit'}`;
+          }
+        } else {
+          ui.statDurationTitle.innerText = '⏱️ 媒体时长';
+          ui.statDuration.innerText = format.duration;
+          ui.statDurationSec.innerText = `${format.duration_seconds.toFixed(2)} 秒`;
+
+          ui.statBitrateTitle.innerText = '📶 总体码率';
+          ui.statBitrate.innerText = format.bit_rate || 'N/A';
+          if (format.bit_rate_bps > 0) {
+            const mbytePerHour = (format.bit_rate_bps * 3600 / 8 / 1024 / 1024).toFixed(1);
+            ui.statBitrateRate.innerText = `约 ${mbytePerHour} MB/小时`;
+          } else {
+            ui.statBitrateRate.innerText = '单声道/变码率';
+          }
+
+          ui.statVisualTitle.innerText = '🎬 视频主轨';
+          if (video_streams.length > 0) {
+            const v = video_streams[0];
+            ui.statVisualCodec.innerText = getCodecFriendlyName(v.codec_name, 'video');
+            const resLabel = getResolutionLabel(v.width, v.height);
+            ui.statVisualRes.innerText = `${v.width}×${v.height}${resLabel ? ` (${resLabel})` : ''} · ${v.fps || 0}fps`;
+          } else {
+            ui.statVisualCodec.innerText = '无视频流';
+            ui.statVisualRes.innerText = '纯音频/容器';
+          }
+
+          ui.statAudioTitle.innerText = '🎵 音频主轨';
+          if (audio_streams.length > 0) {
+            const a = audio_streams[0];
+            ui.statAudioCodec.innerText = getCodecFriendlyName(a.codec_name, 'audio');
+            ui.statAudioSpec.innerText = `${a.sample_rate || '44.1kHz'} · ${a.channel_layout || '立体声'}`;
+          } else {
+            ui.statAudioCodec.innerText = '无音频流';
+            ui.statAudioSpec.innerText = '静音/无伴音';
+          }
+
+          ui.statStreamCount.innerText = `${streams.length} 个媒体流`;
+          ui.statStreamDetails.innerText = `${video_streams.length} 视频 · ${audio_streams.length} 音频 · ${subtitle_streams.length} 字幕`;
+        }
+
+        // 3. 容器表格数据
+        ui.rowFileName.innerText = file.name;
+        ui.rowFileSize.innerText = `${format.size_formatted} (${format.size.toLocaleString()} 字节)`;
+        ui.rowContainer.innerText = format.format_name;
+        ui.rowDuration.innerText = mediaType === 'image' ? 'N/A (静态图像)' : `${format.duration} (${format.duration_seconds.toFixed(3)}s)`;
+        ui.rowBitrate.innerText = format.bit_rate;
+        ui.rowStartTime.innerText = `${format.start_time}s`;
+        if (format.bit_rate_bps > 0) {
+          const gbPerHour = (format.bit_rate_bps * 3600 / 8 / 1024 / 1024 / 1024).toFixed(2);
+          ui.rowStorageRate.innerText = `约 ${gbPerHour} GB / 小时`;
+        } else {
+          ui.rowStorageRate.innerText = mediaType === 'image' ? '单个图片文件' : '自动按需消耗';
+        }
+
+        // 概览流简报
+        ui.overviewStreamsSummary.innerHTML = streams.map(s => {
+          const isVideo = s.codec_type === 'video';
+          const isAudio = s.codec_type === 'audio';
+          const isSub = s.codec_type === 'subtitle';
+          const icon = mediaType === 'image' ? '🖼️' : isVideo ? '🎬' : isAudio ? '🎵' : isSub ? '💬' : '📎';
+          const colorClass = isVideo ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60' :
+                             isAudio ? 'text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/60' :
+                             'text-pink-600 dark:text-pink-400 bg-pink-50 dark:bg-pink-950/60';
+          return `
+            <div class="p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60 flex items-center justify-between">
+              <div class="flex items-center space-x-2.5">
+                <span class="w-7 h-7 rounded-lg ${colorClass} flex items-center justify-center text-xs font-semibold">#${s.index}</span>
+                <div>
+                  <div class="font-medium text-slate-800 dark:text-slate-200">
+                    ${icon} Stream #${s.index}: ${s.codec_type.toUpperCase()} (${getCodecFriendlyName(s.codec_name, s.codec_type)})
+                  </div>
+                  <div class="text-[11px] text-slate-400 font-mono truncate max-w-sm sm:max-w-md">
+                    ${s.raw_info}
+                  </div>
+                </div>
+              </div>
+              <span class="text-xs font-mono text-slate-500">${s.language || 'und'}</span>
+            </div>
+          `;
+        }).join('');
+
+        // 4. 根据类型动态显示/隐藏垂直分区与导航链接
+        if (mediaType === 'image') {
+          ui.secImage.classList.remove('hidden');
+          ui.navJumpImage.classList.remove('hidden');
+          ui.secVideo.classList.add('hidden');
+          ui.navJumpVideo.classList.add('hidden');
+          ui.secAudio.classList.add('hidden');
+          ui.navJumpAudio.classList.add('hidden');
+
+          const imgV = video_streams[0] || {};
+          const mp = imgV.width && imgV.height ? (imgV.width * imgV.height / 1000000).toFixed(2) : '0';
+          ui.imageSpecsList.innerHTML = `
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+              <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700">
+                <div class="flex items-center space-x-2">
+                  <span class="px-2.5 py-1 rounded-lg bg-pink-100 dark:bg-pink-900/60 text-pink-700 dark:text-pink-300 font-mono font-bold text-xs">
+                    Image #0
+                  </span>
+                  <h4 class="font-bold text-base text-slate-800 dark:text-slate-100">图像格式: ${getCodecFriendlyName(imgV.codec_name, 'video')}</h4>
+                </div>
+                <span class="text-xs font-mono text-slate-400">${imgV.codec_name ? imgV.codec_name.toUpperCase() : 'IMAGE'}</span>
+              </div>
+
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs sm:text-sm">
+                <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40">
+                  <span class="text-slate-400 text-xs block mb-1">物理尺寸 (像素)</span>
+                  <span class="font-bold text-slate-800 dark:text-slate-200 font-mono">${imgV.width} × ${imgV.height}</span>
+                  <span class="text-[10px] text-pink-500 font-medium block mt-0.5">${mp} MP (${getResolutionLabel(imgV.width, imgV.height)})</span>
+                </div>
+                <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40">
+                  <span class="text-slate-400 text-xs block mb-1">宽高比 (Aspect Ratio)</span>
+                  <span class="font-bold text-slate-800 dark:text-slate-200 font-mono">DAR: ${imgV.dar || '自适应'}</span>
+                  <span class="text-[10px] text-slate-400 block mt-0.5 font-mono">SAR: ${imgV.sar || '1:1'}</span>
+                </div>
+                <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40">
+                  <span class="text-slate-400 text-xs block mb-1">像素格式与通道</span>
+                  <span class="font-bold text-slate-800 dark:text-slate-200 font-mono">${imgV.pix_fmt || 'rgba'}</span>
+                  <span class="text-[10px] text-slate-400 block mt-0.5">${imgV.color_info || '标准色彩空间'}</span>
+                </div>
+                <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40">
+                  <span class="text-slate-400 text-xs block mb-1">位深色彩级别</span>
+                  <span class="font-bold text-slate-800 dark:text-slate-200 font-mono">${imgV.bit_depth || '8-bit (24位真彩色)'}</span>
+                  <span class="text-[10px] text-slate-400 block mt-0.5">${imgV.color_range || '全色彩范围'}</span>
+                </div>
+              </div>
+
+              <div class="text-[11px] font-mono text-slate-500 bg-slate-100/60 dark:bg-slate-900/60 p-2.5 rounded-lg break-all">
+                ffprobe 探针原始信息: ${imgV.raw_info || 'N/A'}
+              </div>
+            </div>
+          `;
+
+          // 摄影与 EXIF 分区
+          if (data.exif && (data.exif.hasExif || data.exif.dpi)) {
+            ui.secExif.classList.remove('hidden');
+            ui.navJumpExif.classList.remove('hidden');
+            ui.badgeExifTagCount.innerText = `${data.exif.allTags.length} 项 EXIF 详细参数`;
+            renderExifSection(data.exif, data, file);
+          } else {
+            ui.secExif.classList.add('hidden');
+            ui.navJumpExif.classList.add('hidden');
+          }
+        } else {
+          ui.secImage.classList.add('hidden');
+          ui.navJumpImage.classList.add('hidden');
+
+          if (data.exif && data.exif.hasExif) {
+            ui.secExif.classList.remove('hidden');
+            ui.navJumpExif.classList.remove('hidden');
+            ui.badgeExifTagCount.innerText = `${data.exif.allTags.length} 项 EXIF 详细参数`;
+            renderExifSection(data.exif, data, file);
+          } else {
+            ui.secExif.classList.add('hidden');
+            ui.navJumpExif.classList.add('hidden');
+          }
+
+          // 视频分区
+          if (video_streams.length > 0) {
+            ui.secVideo.classList.remove('hidden');
+            ui.navJumpVideo.classList.remove('hidden');
+            ui.badgeVideoCount.innerText = video_streams.length;
+            ui.videoStreamsList.innerHTML = video_streams.map(v => `
+              <div class="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+                <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700">
+                  <div class="flex items-center space-x-2">
+                    <span class="px-2.5 py-1 rounded-lg bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-mono font-bold text-xs">
+                      Stream #${v.index}
+                    </span>
+                    <h4 class="font-bold text-base text-slate-800 dark:text-slate-100">视频流: ${getCodecFriendlyName(v.codec_name, 'video')}</h4>
+                    ${v.disposition.attached_pic ? '<span class="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">封面图片 (Cover Art)</span>' : ''}
+                    ${v.disposition.default ? '<span class="px-2 py-0.5 rounded bg-teal-100 text-teal-800 text-[10px] font-bold">默认轨道 (Default)</span>' : ''}
+                  </div>
+                  <span class="text-xs font-mono text-slate-400">语言: ${v.language || '未指定'}</span>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs sm:text-sm">
+                  <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40">
+                    <span class="text-slate-400 text-xs block mb-1">分辨率规格</span>
+                    <span class="font-bold text-slate-800 dark:text-slate-200 font-mono">${v.width} × ${v.height}</span>
+                    <span class="text-[10px] text-indigo-500 font-medium block mt-0.5">${getResolutionLabel(v.width, v.height)}</span>
+                  </div>
+                  <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40">
+                    <span class="text-slate-400 text-xs block mb-1">帧率 (FPS)</span>
+                    <span class="font-bold text-slate-800 dark:text-slate-200 font-mono">${v.fps ? v.fps + ' fps' : '-'}</span>
+                    <span class="text-[10px] text-slate-400 block mt-0.5 font-mono">tbr: ${v.tbr || '-'}, tbn: ${v.tbn || '-'}</span>
+                  </div>
+                  <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40">
+                    <span class="text-slate-400 text-xs block mb-1">宽高比 (Aspect Ratio)</span>
+                    <span class="font-bold text-slate-800 dark:text-slate-200 font-mono">DAR: ${v.dar || '16:9'}</span>
+                    <span class="text-[10px] text-slate-400 block mt-0.5 font-mono">SAR: ${v.sar || '1:1'}</span>
+                  </div>
+                  <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40">
+                    <span class="text-slate-400 text-xs block mb-1">像素与色深</span>
+                    <span class="font-bold text-slate-800 dark:text-slate-200 font-mono">${v.pix_fmt || 'yuv420p'} (${v.bit_depth || '8-bit'})</span>
+                    <span class="text-[10px] text-slate-400 block mt-0.5 truncate" title="${v.color_range || v.color_info || ''}">${v.color_range || v.color_info || '标准色彩'}</span>
+                  </div>
+                  <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40">
+                    <span class="text-slate-400 text-xs block mb-1">编码标识 (FourCC)</span>
+                    <span class="font-bold text-slate-800 dark:text-slate-200 font-mono">${v.fourcc || 'N/A'}</span>
+                    <span class="text-[10px] text-slate-400 block mt-0.5 font-mono">${v.fourcc_hex || '-'}</span>
+                  </div>
+                  <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40">
+                    <span class="text-slate-400 text-xs block mb-1">编码配置 (Profile)</span>
+                    <span class="font-bold text-slate-800 dark:text-slate-200 font-mono">${v.codec_profile || 'Main'}</span>
+                    <span class="text-[10px] text-indigo-400 block mt-0.5">${v.hdr_info || 'SDR'}</span>
+                  </div>
+                  <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40">
+                    <span class="text-slate-400 text-xs block mb-1">视频码率</span>
+                    <span class="font-bold text-slate-800 dark:text-slate-200 font-mono">${v.bit_rate || '变动/跟随容器'}</span>
+                    <span class="text-[10px] text-slate-400 block mt-0.5">${v.bps_str || ''}</span>
+                  </div>
+                  <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40">
+                    <span class="text-slate-400 text-xs block mb-1">帧数 / 统计信息</span>
+                    <span class="font-bold text-slate-800 dark:text-slate-200 font-mono">${v.total_frames ? v.total_frames + ' 帧' : (v.stream_size ? v.stream_size : '-')}</span>
+                    <span class="text-[10px] text-slate-400 block mt-0.5">${v.rotation ? '旋转: ' + v.rotation : (v.disposition.default ? '默认轨道' : '')}</span>
+                  </div>
+                </div>
+
+                <div class="text-[11px] font-mono text-slate-500 bg-slate-100/60 dark:bg-slate-900/60 p-2.5 rounded-lg break-all">
+                  ffprobe 信息: ${v.raw_info}
+                </div>
+              </div>
+            `).join('');
+          } else {
+            ui.secVideo.classList.add('hidden');
+            ui.navJumpVideo.classList.add('hidden');
+          }
+
+          // 音频分区
+          if (audio_streams.length > 0) {
+            ui.secAudio.classList.remove('hidden');
+            ui.navJumpAudio.classList.remove('hidden');
+            ui.badgeAudioCount.innerText = audio_streams.length;
+            ui.audioStreamsList.innerHTML = audio_streams.map(a => `
+              <div class="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+                <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700">
+                  <div class="flex items-center space-x-2">
+                    <span class="px-2.5 py-1 rounded-lg bg-teal-100 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300 font-mono font-bold text-xs">
+                      Stream #${a.index}
+                    </span>
+                    <h4 class="font-bold text-base text-slate-800 dark:text-slate-100">音频流: ${getCodecFriendlyName(a.codec_name, 'audio')}</h4>
+                    ${a.disposition.default ? '<span class="px-2 py-0.5 rounded bg-teal-100 text-teal-800 text-[10px] font-bold">默认轨道 (Default)</span>' : ''}
+                  </div>
+                  <span class="text-xs font-mono text-slate-400">语言: ${a.language || '未指定'}</span>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs sm:text-sm">
+                  <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40">
+                    <span class="text-slate-400 text-xs block mb-1">采样率 (Sample Rate)</span>
+                    <span class="font-bold text-slate-800 dark:text-slate-200 font-mono">${a.sample_rate || '48000 Hz'}</span>
+                  </div>
+                  <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40">
+                    <span class="text-slate-400 text-xs block mb-1">声道数与布局</span>
+                    <span class="font-bold text-slate-800 dark:text-slate-200 font-mono">${a.channel_layout || 'stereo (立体声)'}</span>
+                  </div>
+                  <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40">
+                    <span class="text-slate-400 text-xs block mb-1">采样格式与位深</span>
+                    <span class="font-bold text-slate-800 dark:text-slate-200 font-mono">${a.sample_fmt || 'fltp'} (${a.bit_depth || '16-bit'})</span>
+                  </div>
+                  <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40">
+                    <span class="text-slate-400 text-xs block mb-1">音频比特率</span>
+                    <span class="font-bold text-slate-800 dark:text-slate-200 font-mono">${a.bit_rate || '变动/跟随容器'}</span>
+                    <span class="text-[10px] text-slate-400 block mt-0.5">${a.bps_str || ''}</span>
+                  </div>
+                  <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40">
+                    <span class="text-slate-400 text-xs block mb-1">编码标识 (FourCC)</span>
+                    <span class="font-bold text-slate-800 dark:text-slate-200 font-mono">${a.fourcc || 'N/A'}</span>
+                    <span class="text-[10px] text-slate-400 block mt-0.5 font-mono">${a.fourcc_hex || '-'}</span>
+                  </div>
+                  <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40">
+                    <span class="text-slate-400 text-xs block mb-1">轨道文件体积</span>
+                    <span class="font-bold text-slate-800 dark:text-slate-200 font-mono">${a.stream_size || '-'}</span>
+                  </div>
+                </div>
+
+                <div class="text-[11px] font-mono text-slate-500 bg-slate-100/60 dark:bg-slate-900/60 p-2.5 rounded-lg break-all">
+                  ffprobe 信息: ${a.raw_info}
+                </div>
+              </div>
+            `).join('');
+          } else {
+            ui.secAudio.classList.add('hidden');
+            ui.navJumpAudio.classList.add('hidden');
+          }
+        }
+
+        // 字幕与章节分区
+        if (subtitle_streams.length > 0 || data.chapters.length > 0) {
+          ui.secSubtitles.classList.remove('hidden');
+          ui.navJumpSub.classList.remove('hidden');
+
+          if (subtitle_streams.length > 0) {
+            ui.subtitlesList.innerHTML = subtitle_streams.map(sub => `
+              <div class="p-3 rounded-xl border border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                  <span class="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-mono text-xs font-bold">#${sub.index}</span>
+                  <div>
+                    <span class="font-medium text-slate-800 dark:text-slate-200 text-sm">${getCodecFriendlyName(sub.codec_name, 'sub')}</span>
+                    <span class="text-xs text-slate-400 ml-2 font-mono">${sub.raw_info}</span>
+                  </div>
+                </div>
+                <span class="text-xs font-mono font-medium px-2 py-1 rounded bg-slate-100 dark:bg-slate-700">${sub.language || 'und'}</span>
+              </div>
+            `).join('');
+          } else {
+            ui.subtitlesList.innerHTML = `<div class="text-xs text-slate-400 py-2">本文件无内嵌字幕流</div>`;
+          }
+
+          if (data.chapters.length > 0) {
+            ui.chaptersList.innerHTML = `
+              <table class="w-full text-left text-xs font-mono">
+                <thead>
+                  <tr class="border-b border-slate-200 dark:border-slate-700 text-slate-400">
+                    <th class="py-2">序号</th>
+                    <th class="py-2">起始时间</th>
+                    <th class="py-2">结束时间</th>
+                    <th class="py-2">章节时长</th>
+                    <th class="py-2">标题 / 标记</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 dark:divide-slate-700/60">
+                  ${data.chapters.map(ch => `
+                    <tr>
+                      <td class="py-2.5">Chapter #${ch.id}</td>
+                      <td class="py-2.5">${ch.start}s (${formatDuration(ch.start)})</td>
+                      <td class="py-2.5">${ch.end}s (${formatDuration(ch.end)})</td>
+                      <td class="py-2.5">${ch.duration}s</td>
+                      <td class="py-2.5 font-sans font-medium text-slate-800 dark:text-slate-200">${ch.tags.title || '章节 ' + (ch.id + 1)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            `;
+          } else {
+            ui.chaptersList.innerHTML = `<div class="text-xs text-slate-400 py-2">本文件未包含章节标记信息</div>`;
+          }
+        } else {
+          ui.secSubtitles.classList.add('hidden');
+          ui.navJumpSub.classList.add('hidden');
+        }
+
+        // 5. 完整元数据与 EXIF 标签表格
+        const allMetaEntries = [];
+        for (const [k, v] of Object.entries(format.tags)) {
+          allMetaEntries.push({ scope: 'Container / Format', key: k, value: v });
+        }
+        streams.forEach(s => {
+          for (const [k, v] of Object.entries(s.tags)) {
+            allMetaEntries.push({ scope: `Stream #${s.index} (${s.codec_type.toUpperCase()})`, key: k, value: v });
+          }
+        });
+        if (data.exifTags && data.exifTags.length > 0) {
+          data.exifTags.forEach(t => allMetaEntries.push(t));
+        }
+
+        ui.badgeMetaCount.innerText = allMetaEntries.length;
+        renderMetadataTable(allMetaEntries);
+
+        // 6. 终端日志与 JSON
+        ui.rawLogBox.innerText = data.rawLog;
+        const ffprobeJson = buildFFprobeJson(data);
+        ui.jsonViewerBox.innerText = JSON.stringify(ffprobeJson, null, 2);
+
+        // 7. 挂载预览播放器 / 图像预览
+        setupPreviewPlayer(file, mediaType);
+      }
+
+      // --- 渲染摄影装备、EXIF 与 DPI 专属分区 ---
+      function renderExifSection(exif, data, file) {
+        const { camera, exposure, dpi, gps } = exif;
+        const imgV = (data.video_streams && data.video_streams[0]) || {};
+        const w = imgV.width || 0;
+        const h = imgV.height || 0;
+
+        // 计算物理冲印尺寸
+        const dpiVal = (dpi && dpi.x) ? dpi.x : 300;
+        const printWIn = w > 0 ? (w / dpiVal).toFixed(1) : '-';
+        const printHIn = h > 0 ? (h / dpiVal).toFixed(1) : '-';
+        const printWCm = w > 0 ? (printWIn * 2.54).toFixed(1) : '-';
+        const printHCm = h > 0 ? (printHIn * 2.54).toFixed(1) : '-';
+
+        // 300 DPI 与 150 DPI 参考
+        const p300Cm = w > 0 ? `${(w / 300 * 2.54).toFixed(1)} × ${(h / 300 * 2.54).toFixed(1)} cm` : '-';
+        const p150Cm = w > 0 ? `${(w / 150 * 2.54).toFixed(1)} × ${(h / 150 * 2.54).toFixed(1)} cm` : '-';
+
+        const lensDisplay = camera.lensModel || (Array.isArray(camera.lensSpec) ? `${camera.lensSpec[0]}-${camera.lensSpec[1]}mm` : camera.lensSpec) || '原机镜头 / 未记录';
+
+        let gpsHtml = '';
+        if (gps) {
+          gpsHtml = `
+            <div class="bg-gradient-to-br from-emerald-500/10 via-teal-500/10 to-indigo-500/10 dark:from-emerald-950/30 dark:to-slate-800 p-5 rounded-2xl border border-emerald-200/80 dark:border-emerald-800/60 space-y-4 col-span-1 md:col-span-2">
+              <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-emerald-100 dark:border-emerald-800/40">
+                <div class="flex items-center space-x-2">
+                  <span class="text-xl">📍</span>
+                  <h4 class="font-bold text-sm text-slate-800 dark:text-slate-100">GPS 卫星定位与拍摄地理位置</h4>
+                </div>
+                <span class="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300 text-xs font-mono font-bold">
+                  ✓ 已捕获 GPS 卫星坐标
+                </span>
+              </div>
+
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div class="p-3 bg-white dark:bg-slate-800/90 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                  <span class="text-slate-400 block text-[11px] mb-1">纬度 (Latitude)</span>
+                  <span class="font-mono font-bold text-slate-800 dark:text-slate-100 text-sm">${gps.latitudeDMS}</span>
+                  <span class="text-[10px] text-slate-400 block mt-0.5">十进制: ${gps.latitude.toFixed(6)}°</span>
+                </div>
+                <div class="p-3 bg-white dark:bg-slate-800/90 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                  <span class="text-slate-400 block text-[11px] mb-1">经度 (Longitude)</span>
+                  <span class="font-mono font-bold text-slate-800 dark:text-slate-100 text-sm">${gps.longitudeDMS}</span>
+                  <span class="text-[10px] text-slate-400 block mt-0.5">十进制: ${gps.longitude.toFixed(6)}°</span>
+                </div>
+                <div class="p-3 bg-white dark:bg-slate-800/90 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                  <span class="text-slate-400 block text-[11px] mb-1">海拔高度 (Altitude)</span>
+                  <span class="font-mono font-bold text-slate-800 dark:text-slate-100 text-sm">${gps.altitudeFormatted || '未测量海拔'}</span>
+                  <span class="text-[10px] text-slate-400 block mt-0.5">相对海平面高度</span>
+                </div>
+                <div class="p-3 bg-white dark:bg-slate-800/90 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                  <span class="text-slate-400 block text-[11px] mb-1">卫星对时时刻</span>
+                  <span class="font-mono font-bold text-slate-800 dark:text-slate-100">${gps.timestamp || exposure.dateTimeOriginal || '同拍摄时间'}</span>
+                  <span class="text-[10px] text-slate-400 block mt-0.5">UTC 卫星时间</span>
+                </div>
+              </div>
+
+              <div class="pt-1 flex flex-wrap items-center gap-2 text-xs">
+                <button id="btnCopyGpsCoords" class="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium transition flex items-center space-x-1.5 shadow-sm" data-coords="${gps.latitude.toFixed(6)},${gps.longitude.toFixed(6)}">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+                  <span>复制经纬度坐标 (${gps.latitude.toFixed(4)}, ${gps.longitude.toFixed(4)})</span>
+                </button>
+                <a href="https://uri.amap.com/marker?position=${gps.longitude.toFixed(6)},${gps.latitude.toFixed(6)}&name=${encodeURIComponent(file.name)}" target="_blank" rel="noopener" class="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-medium transition flex items-center space-x-1 shadow-sm">
+                  <span>🗺️ 在高德地图中查看</span>
+                </a>
+                <a href="https://www.google.com/maps?q=${gps.latitude.toFixed(6)},${gps.longitude.toFixed(6)}" target="_blank" rel="noopener" class="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-medium transition flex items-center space-x-1 shadow-sm">
+                  <span>🌐 Google Maps</span>
+                </a>
+                <a href="https://www.openstreetmap.org/?mlat=${gps.latitude.toFixed(6)}&mlon=${gps.longitude.toFixed(6)}#map=16/${gps.latitude.toFixed(6)}/${gps.longitude.toFixed(6)}" target="_blank" rel="noopener" class="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-medium transition flex items-center space-x-1 shadow-sm">
+                  <span>📍 OpenStreetMap</span>
+                </a>
+              </div>
+            </div>
+          `;
+        } else {
+          gpsHtml = `
+            <div class="bg-slate-50 dark:bg-slate-900/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4 col-span-1 md:col-span-2">
+              <div class="flex items-start space-x-3.5">
+                <div class="w-10 h-10 rounded-xl bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400 flex-shrink-0 text-xl">
+                  🛰️
+                </div>
+                <div>
+                  <div class="flex items-center space-x-2">
+                    <h4 class="font-bold text-sm text-slate-800 dark:text-slate-200">GPS 卫星定位: 未记录地理坐标</h4>
+                    <span class="px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] font-mono">No GPS Tag</span>
+                  </div>
+                  <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed max-w-2xl">
+                    本照片元数据中未包含卫星经纬度位置信息。常见原因：专业相机（如 ${camera.model || 'Canon EOS R8'}）拍摄时未开启内置/外接 GPS 卫星模块；或在后期导出保存（如导出 JPEG）时已自动抹除敏感地理位置数据以保护摄影隐私。
+                  </p>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+
+        ui.exifContentWrapper.innerHTML = `
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- 1. 相机机身与镜头硬件装备 -->
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+              <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700">
+                <div class="flex items-center space-x-2">
+                  <span class="text-xl">📷</span>
+                  <h4 class="font-bold text-sm text-slate-800 dark:text-slate-100">相机机身与镜头装备 (Camera Gear)</h4>
+                </div>
+                <span class="text-xs font-mono text-indigo-500 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded font-bold">${camera.make || '摄影器材'}</span>
+              </div>
+
+              <div class="grid grid-cols-2 gap-3 text-xs sm:text-sm">
+                <div class="p-3 bg-slate-50 dark:bg-slate-700/40 rounded-xl">
+                  <span class="text-slate-400 text-xs block mb-1">相机制造厂商 (Make)</span>
+                  <span class="font-bold text-slate-800 dark:text-slate-200">${camera.make || '未知厂商'}</span>
+                </div>
+                <div class="p-3 bg-slate-50 dark:bg-slate-700/40 rounded-xl">
+                  <span class="text-slate-400 text-xs block mb-1">相机完整型号 (Model)</span>
+                  <span class="font-bold text-indigo-600 dark:text-indigo-400">${camera.model || '未知型号'}</span>
+                </div>
+                <div class="p-3 bg-slate-50 dark:bg-slate-700/40 rounded-xl col-span-2">
+                  <span class="text-slate-400 text-xs block mb-1">镜头型号与焦距规格 (Lens)</span>
+                  <span class="font-bold text-slate-800 dark:text-slate-200 font-mono">${lensDisplay}</span>
+                </div>
+                <div class="p-3 bg-slate-50 dark:bg-slate-700/40 rounded-xl">
+                  <span class="text-slate-400 text-xs block mb-1">机身唯一序列号 (Serial)</span>
+                  <span class="font-mono text-slate-700 dark:text-slate-300 font-medium">${camera.bodySerialNumber || '未登记'}</span>
+                </div>
+                <div class="p-3 bg-slate-50 dark:bg-slate-700/40 rounded-xl">
+                  <span class="text-slate-400 text-xs block mb-1">画面取景构图方向</span>
+                  <span class="text-slate-800 dark:text-slate-200 font-medium text-xs">${camera.orientationText || '标准水平'}</span>
+                </div>
+                ${camera.software ? `
+                <div class="p-3 bg-slate-50 dark:bg-slate-700/40 rounded-xl col-span-2">
+                  <span class="text-slate-400 text-xs block mb-1">机内固件 / 处理软件</span>
+                  <span class="text-slate-700 dark:text-slate-300 font-mono text-xs">${camera.software}</span>
+                </div>` : ''}
+              </div>
+            </div>
+
+            <!-- 2. 摄影曝光与光学参数 -->
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+              <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700">
+                <div class="flex items-center space-x-2">
+                  <span class="text-xl">⚡</span>
+                  <h4 class="font-bold text-sm text-slate-800 dark:text-slate-100">光学曝光与摄影参数 (Optics)</h4>
+                </div>
+                <span class="text-xs font-mono text-amber-500 bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded font-bold">${exposure.exposureProgramText || '拍摄参数'}</span>
+              </div>
+
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs sm:text-sm">
+                <div class="p-3 bg-slate-50 dark:bg-slate-700/40 rounded-xl">
+                  <span class="text-slate-400 text-xs block mb-1">快门速度 (Shutter)</span>
+                  <span class="font-bold text-indigo-600 dark:text-indigo-400 font-mono text-base">${exposure.exposureTimeFormatted || '-'}</span>
+                  <span class="text-[10px] text-slate-400 block mt-0.5 font-mono">${exposure.exposureTime ? exposure.exposureTime + 's' : ''}</span>
+                </div>
+                <div class="p-3 bg-slate-50 dark:bg-slate-700/40 rounded-xl">
+                  <span class="text-slate-400 text-xs block mb-1">光圈大小 (Aperture)</span>
+                  <span class="font-bold text-indigo-600 dark:text-indigo-400 font-mono text-base">${exposure.fNumber ? 'f/' + exposure.fNumber : '-'}</span>
+                  <span class="text-[10px] text-slate-400 block mt-0.5">相对孔径</span>
+                </div>
+                <div class="p-3 bg-slate-50 dark:bg-slate-700/40 rounded-xl">
+                  <span class="text-slate-400 text-xs block mb-1">感光度 (ISO)</span>
+                  <span class="font-bold text-indigo-600 dark:text-indigo-400 font-mono text-base">${exposure.iso ? 'ISO ' + exposure.iso : '-'}</span>
+                  <span class="text-[10px] text-slate-400 block mt-0.5">感光速度</span>
+                </div>
+                <div class="p-3 bg-slate-50 dark:bg-slate-700/40 rounded-xl">
+                  <span class="text-slate-400 text-xs block mb-1">镜头焦距 (Focal)</span>
+                  <span class="font-bold text-slate-800 dark:text-slate-200 font-mono">${exposure.focalLength ? exposure.focalLength + ' mm' : '-'}</span>
+                  <span class="text-[10px] text-slate-400 block mt-0.5">${exposure.focalLength35mm ? '等效35mm: ' + exposure.focalLength35mm + 'mm' : '物理焦距'}</span>
+                </div>
+                <div class="p-3 bg-slate-50 dark:bg-slate-700/40 rounded-xl">
+                  <span class="text-slate-400 text-xs block mb-1">测光模式 (Metering)</span>
+                  <span class="font-medium text-slate-800 dark:text-slate-200 text-xs">${exposure.meteringModeText || '矩阵测光'}</span>
+                </div>
+                <div class="p-3 bg-slate-50 dark:bg-slate-700/40 rounded-xl">
+                  <span class="text-slate-400 text-xs block mb-1">曝光补偿 (Bias)</span>
+                  <span class="font-bold text-slate-800 dark:text-slate-200 font-mono">${exposure.exposureBias || '0.0 EV'}</span>
+                </div>
+                <div class="p-3 bg-slate-50 dark:bg-slate-700/40 rounded-xl">
+                  <span class="text-slate-400 text-xs block mb-1">闪光灯状态</span>
+                  <span class="text-slate-800 dark:text-slate-200 font-medium text-xs">${exposure.flashText || '关闭'}</span>
+                </div>
+                <div class="p-3 bg-slate-50 dark:bg-slate-700/40 rounded-xl">
+                  <span class="text-slate-400 text-xs block mb-1">白平衡模式</span>
+                  <span class="text-slate-800 dark:text-slate-200 font-medium text-xs">${exposure.whiteBalanceText || '自动'}</span>
+                </div>
+                <div class="p-3 bg-slate-50 dark:bg-slate-700/40 rounded-xl">
+                  <span class="text-slate-400 text-xs block mb-1">色彩空间描述</span>
+                  <span class="text-slate-800 dark:text-slate-200 font-medium text-xs truncate" title="${exposure.colorSpaceText || ''}">${exposure.colorSpaceText || 'sRGB'}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. DPI 打印物理分辨率与幅面 -->
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4 col-span-1 md:col-span-2">
+              <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700">
+                <div class="flex items-center space-x-2">
+                  <span class="text-xl">🖨️</span>
+                  <h4 class="font-bold text-sm text-slate-800 dark:text-slate-100">打印物理分辨率与冲印幅面估算 (DPI & Print Dimensions)</h4>
+                </div>
+                <span class="text-xs font-mono text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/60 px-2 py-0.5 rounded font-bold">${dpi ? dpi.text : '默认 300 DPI'}</span>
+              </div>
+
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs sm:text-sm">
+                <div class="p-3.5 bg-gradient-to-br from-indigo-50 to-slate-50 dark:from-slate-700/50 dark:to-slate-800 rounded-xl border border-indigo-100/60 dark:border-slate-600/60">
+                  <span class="text-indigo-600 dark:text-indigo-400 font-semibold text-xs block mb-1">当前图像标签 DPI</span>
+                  <span class="font-mono font-bold text-lg text-slate-800 dark:text-slate-100">${dpi ? `${dpi.x} × ${dpi.y}` : '350 × 350'}</span>
+                  <span class="text-[10px] text-slate-400 block mt-0.5">${dpi ? dpi.unit : '点/英寸 (Dots Per Inch)'}</span>
+                </div>
+                <div class="p-3.5 bg-slate-50 dark:bg-slate-700/40 rounded-xl">
+                  <span class="text-slate-400 text-xs block mb-1">原生最佳冲印画幅</span>
+                  <span class="font-mono font-bold text-slate-800 dark:text-slate-100">${printWCm} × ${printHCm} cm</span>
+                  <span class="text-[10px] text-slate-400 block mt-0.5 font-mono">${printWIn} × ${printHIn} 英寸 (@${dpiVal} DPI)</span>
+                </div>
+                <div class="p-3.5 bg-slate-50 dark:bg-slate-700/40 rounded-xl">
+                  <span class="text-slate-400 text-xs block mb-1">商业杂志印刷画幅 (300DPI)</span>
+                  <span class="font-mono font-bold text-slate-800 dark:text-slate-100">${p300Cm}</span>
+                  <span class="text-[10px] text-slate-400 block mt-0.5">高品质画册/期刊标准</span>
+                </div>
+                <div class="p-3.5 bg-slate-50 dark:bg-slate-700/40 rounded-xl">
+                  <span class="text-slate-400 text-xs block mb-1">海报展览印刷画幅 (150DPI)</span>
+                  <span class="font-mono font-bold text-slate-800 dark:text-slate-100">${p150Cm}</span>
+                  <span class="text-[10px] text-slate-400 block mt-0.5">远距离视距展示看板</span>
+                </div>
+              </div>
+
+              <!-- 拍摄时间与时区 -->
+              <div class="pt-2 border-t border-slate-100 dark:border-slate-700/60 flex flex-wrap items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                <div class="flex items-center space-x-2">
+                  <span>📅 原始拍摄时间:</span>
+                  <strong class="font-mono text-slate-700 dark:text-slate-200">${exposure.dateTimeOriginal || '未标注'}</strong>
+                  ${exposure.offsetTime ? `<span class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-mono text-[10px]">时区 ${exposure.offsetTime}</span>` : ''}
+                  ${exposure.subSecTime ? `<span class="text-[10px] text-slate-400 font-mono">.${exposure.subSecTime}s</span>` : ''}
+                </div>
+                <span class="text-[11px] text-slate-400 font-mono">像素总量: ${w} × ${h} = ${(w * h / 1000000).toFixed(2)} MP</span>
+              </div>
+            </div>
+
+            <!-- 4. GPS 地理位置 (全幅占位) -->
+            ${gpsHtml}
+          </div>
+        `;
+
+        // 绑定 GPS 复制按钮
+        const btnCopyGps = ui.exifContentWrapper.querySelector('#btnCopyGpsCoords');
+        if (btnCopyGps) {
+          btnCopyGps.addEventListener('click', () => {
+            const coords = btnCopyGps.getAttribute('data-coords');
+            copyToClipboard(coords, `已复制经纬度: ${coords}`);
+          });
+        }
+      }
+
+      // --- 渲染元数据搜索过滤表格 ---
+      function renderMetadataTable(entries) {
+        if (entries.length === 0) {
+          ui.metadataTableBody.innerHTML = `<tr><td colspan="4" class="py-6 text-center text-slate-400">未提取到特定的元数据或 EXIF 标签</td></tr>`;
+          return;
+        }
+
+        ui.metadataTableBody.innerHTML = entries.map(item => `
+          <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition">
+            <td class="py-2 px-3 text-slate-500 font-sans text-xs">${item.scope}</td>
+            <td class="py-2 px-3 font-semibold text-indigo-600 dark:text-indigo-400">${item.key}</td>
+            <td class="py-2 px-3 text-slate-800 dark:text-slate-200 max-w-md break-all">${item.value}</td>
+            <td class="py-2 px-3 text-right">
+              <button class="btn-copy-tag text-[11px] text-slate-400 hover:text-indigo-500 transition px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700" data-value="${encodeURIComponent(item.value)}">复制</button>
+            </td>
+          </tr>
+        `).join('');
+
+        ui.metadataTableBody.querySelectorAll('.btn-copy-tag').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const val = decodeURIComponent(btn.getAttribute('data-value'));
+            copyToClipboard(val, '已复制标签值！');
+          });
+        });
+      }
+
+      // 元数据搜索过滤监听
+      ui.metaSearchInput.addEventListener('input', (e) => {
+        if (!currentParsedData) return;
+        const q = e.target.value.toLowerCase().trim();
+        const allMetaEntries = [];
+        for (const [k, v] of Object.entries(currentParsedData.format.tags)) {
+          allMetaEntries.push({ scope: 'Container / Format', key: k, value: v });
+        }
+        currentParsedData.streams.forEach(s => {
+          for (const [k, v] of Object.entries(s.tags)) {
+            allMetaEntries.push({ scope: `Stream #${s.index} (${s.codec_type.toUpperCase()})`, key: k, value: v });
+          }
+        });
+        if (currentParsedData.exifTags && currentParsedData.exifTags.length > 0) {
+          currentParsedData.exifTags.forEach(t => allMetaEntries.push(t));
+        }
+
+        const filtered = allMetaEntries.filter(it => 
+          it.key.toLowerCase().includes(q) || 
+          String(it.value).toLowerCase().includes(q) ||
+          it.scope.toLowerCase().includes(q)
+        );
+        renderMetadataTable(filtered);
+      });
+
+      // --- 本地播放器配置与 Web Audio / 图片交互 ---
+      function setupPreviewPlayer(file, mediaType) {
+        const objectUrl = URL.createObjectURL(file);
+
+        // 清理各分析器前置残留内容
+        ui.videoFilmstripContainer.innerHTML = '';
+        if (ui.videoScopesContainer) {
+          if (ui.videoScopesContainer._videoScopesCleanup) {
+            ui.videoScopesContainer._videoScopesCleanup();
+            ui.videoScopesContainer._videoScopesCleanup = null;
+          }
+          ui.videoScopesContainer.innerHTML = '';
+        }
+        ui.imagePaletteContainer.innerHTML = '';
+        ui.imageScopesContainer.innerHTML = '';
+        ui.audioWaveformContainer.innerHTML = '';
+        ui.audioHealthContainer.innerHTML = '';
+
+        if (mediaType === 'image') {
+          // 图片模式
+          ui.imagePreviewWrapper.classList.remove('hidden');
+          ui.videoPreviewWrapper.classList.add('hidden');
+          ui.audioPreviewWrapper.classList.add('hidden');
+          ui.btnCaptureSnapshot.classList.add('hidden');
+          ui.btnDownloadImageDirect.classList.remove('hidden');
+          ui.noDirectPreviewTip.classList.add('hidden');
+
+          ui.imagePreview.src = objectUrl;
+          ui.btnDownloadImageDirect.href = objectUrl;
+          ui.btnDownloadImageDirect.download = file.name;
+
+          ui.imagePreview.onload = () => {
+            const w = ui.imagePreview.naturalWidth;
+            const h = ui.imagePreview.naturalHeight;
+            const mp = (w * h / 1000000).toFixed(2);
+            ui.imageDimensionsBadge.innerText = `${w} × ${h} (${mp} MP)`;
+
+            // 提取主要色调调色板与影调明暗分析
+            try {
+              extractImagePaletteAndTone(ui.imagePreview, ui.imagePaletteContainer, (hex) => {
+                copyToClipboard(hex, `已复制色彩代码: ${hex}`);
+              });
+            } catch (err) {
+              console.warn('Palette extraction failed:', err);
+            }
+
+            // 绘制专业图像示波器 (直方图 / 矢量示波图 / RGB分量图)
+            try {
+              renderImageScopes(ui.imagePreview, ui.imageScopesContainer);
+            } catch (err) {
+              console.warn('Image scopes rendering failed:', err);
+            }
+          };
+        } else if (mediaType === 'video') {
+          // 视频模式 (含 FLV, MP4, MKV 等)
+          ui.videoPreviewWrapper.classList.remove('hidden');
+          ui.imagePreviewWrapper.classList.add('hidden');
+          ui.audioPreviewWrapper.classList.add('hidden');
+          ui.btnCaptureSnapshot.classList.remove('hidden');
+          ui.btnDownloadImageDirect.classList.add('hidden');
+          ui.noDirectPreviewTip.classList.add('hidden');
+
+          ui.videoPlayer.src = objectUrl;
+          ui.videoPlayer.load();
+
+          ui.videoPlayer.onerror = () => {
+            ui.noDirectPreviewTip.classList.remove('hidden');
+          };
+
+          // 执行视频时间线关键帧胶卷生成
+          try {
+            generateVideoFilmstrip(file, ui.videoPlayer, ui.videoFilmstripContainer);
+          } catch (err) {
+            console.warn('Filmstrip generation failed:', err);
+          }
+
+          // 挂载视频专业实时监视示波器与运动分析
+          try {
+            mountVideoScopes(ui.videoPlayer, ui.videoScopesContainer);
+          } catch (err) {
+            console.warn('Video scopes mounting failed:', err);
+          }
+        } else {
+          // 音频模式
+          ui.videoPreviewWrapper.classList.add('hidden');
+          ui.imagePreviewWrapper.classList.add('hidden');
+          ui.audioPreviewWrapper.classList.remove('hidden');
+          ui.btnCaptureSnapshot.classList.add('hidden');
+          ui.btnDownloadImageDirect.classList.add('hidden');
+          ui.noDirectPreviewTip.classList.add('hidden');
+
+          ui.audioPlayer.src = objectUrl;
+          ui.audioPlayer.load();
+
+          initAudioVisualizer();
+
+          // 读取 ArrayBuffer 并执行音频全局交互式声波图 & 爆音/静音/电平声学质检
+          file.arrayBuffer().then(buf => {
+            return analyzeAudioBuffer(buf);
+          }).then(metrics => {
+            renderAudioHealthCard(ui.audioHealthContainer, metrics);
+            mountWaveformViewer(ui.audioWaveformContainer, metrics.peaksData, ui.audioPlayer, metrics.duration);
+          }).catch(err => {
+            console.warn('Audio acoustic analysis warning:', err);
+            ui.audioHealthContainer.innerHTML = `
+              <div class="p-3.5 bg-slate-50 dark:bg-slate-800/80 rounded-xl text-xs text-slate-400 border border-slate-200 dark:border-slate-700">
+                提示: 浏览器未能直接对该格式提取 PCM 声波进行深度质检 (${err.message})，但 FFmpeg 已成功解析其格式与容器参数。
+              </div>
+            `;
+          });
+        }
+      }
+
+      // --- Web Audio 动态频谱柱状图绘制 ---
+      function initAudioVisualizer() {
+        if (!ui.audioPlayer) return;
+        const canvas = ui.visualizerCanvas;
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = canvas.parentElement.clientWidth * window.devicePixelRatio || 600;
+        canvas.height = 128 * window.devicePixelRatio;
+
+        try {
+          if (!audioCtx) {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new AudioCtx();
+            analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 128;
+            audioSource = audioCtx.createMediaElementSource(ui.audioPlayer);
+            audioSource.connect(analyser);
+            analyser.connect(audioCtx.destination);
+          }
+        } catch (e) {
+          console.warn('AudioContext setup ignored', e);
+        }
+
+        const bufferLength = analyser ? analyser.frequencyBinCount : 64;
+        const dataArray = new Uint8Array(bufferLength);
+
+        function draw() {
+          visualizerAnimId = requestAnimationFrame(draw);
+
+          const w = canvas.width;
+          const h = canvas.height;
+          ctx.clearRect(0, 0, w, h);
+
+          if (analyser) {
+            analyser.getByteFrequencyData(dataArray);
+          }
+
+          const isDark = document.documentElement.classList.contains('dark');
+          const barWidth = (w / bufferLength) * 1.8;
+          let x = 0;
+
+          for (let i = 0; i < bufferLength; i++) {
+            const barHeight = (dataArray[i] / 255) * (h * 0.9);
+            const grad = ctx.createLinearGradient(0, h, 0, 0);
+            if (isDark) {
+              grad.addColorStop(0, '#06b6d4');
+              grad.addColorStop(0.5, '#6366f1');
+              grad.addColorStop(1, '#a855f7');
+            } else {
+              grad.addColorStop(0, '#3b82f6');
+              grad.addColorStop(0.5, '#6366f1');
+              grad.addColorStop(1, '#ec4899');
+            }
+
+            ctx.fillStyle = grad;
+            ctx.fillRect(x, h - barHeight, barWidth - 2, barHeight);
+            x += barWidth;
+          }
+        }
+
+        if (visualizerAnimId) cancelAnimationFrame(visualizerAnimId);
+        draw();
+
+        ui.audioPlayer.onplay = () => {
+          if (audioCtx && audioCtx.state === 'suspended') {
+            audioCtx.resume();
+          }
+        };
+      }
+
+      // --- 截取当前视频帧画面 ---
+      ui.btnCaptureSnapshot.addEventListener('click', () => {
+        const video = ui.videoPlayer;
+        if (!video.videoWidth || !video.videoHeight) {
+          showToast('视频未处于可截帧状态');
+          return;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        const dataUrl = canvas.toDataURL('image/png');
+        ui.snapshotImg.src = dataUrl;
+        ui.snapshotResolutionBadge.innerText = `${canvas.width} × ${canvas.height} (${getResolutionLabel(canvas.width, canvas.height)})`;
+        ui.btnDownloadSnapshot.href = dataUrl;
+        ui.btnDownloadSnapshot.download = `snapshot_${Math.floor(video.currentTime)}s.png`;
+
+        ui.snapshotModal.classList.remove('hidden');
+      });
+
+      const closeSnapshotModal = () => ui.snapshotModal.classList.add('hidden');
+      ui.btnCloseSnapshotModal.addEventListener('click', closeSnapshotModal);
+      ui.btnCloseSnapshotBtn.addEventListener('click', closeSnapshotModal);
+
+      // --- 原始日志动态展示与过滤 ---
+      function appendRawLogLine(line) {
+        ui.rawLogBox.innerText += line + '\n';
+        ui.rawLogBox.scrollTop = ui.rawLogBox.scrollHeight;
+      }
+
+      ui.logFilterInput.addEventListener('input', (e) => {
+        const filter = e.target.value.toLowerCase();
+        if (!filter) {
+          ui.rawLogBox.innerText = rawLogLines.join('\n');
+          return;
+        }
+        const filteredLines = rawLogLines.filter(l => l.toLowerCase().includes(filter));
+        ui.rawLogBox.innerText = filteredLines.join('\n');
+      });
+
+      // --- 复制与导出交互 ---
+      function generateTextSummary() {
+        if (!currentParsedData) return '';
+        const d = currentParsedData;
+        let txt = `====================================\n`;
+        txt += `Media & Image Inspector (FFprobe.wasm)\n`;
+        txt += `====================================\n`;
+        txt += `文件名: ${d.format.filename}\n`;
+        txt += `文件大小: ${d.format.size_formatted} (${d.format.size} 字节)\n`;
+        txt += `封装格式: ${d.format.format_name}\n`;
+        txt += `媒体时长: ${d.format.duration} (${d.format.duration_seconds.toFixed(2)}s)\n`;
+        txt += `总体码率: ${d.format.bit_rate}\n\n`;
+
+        d.streams.forEach(s => {
+          txt += `[Stream #${s.index} - ${s.codec_type.toUpperCase()}]\n`;
+          txt += `  - 编码格式: ${getCodecFriendlyName(s.codec_name, s.codec_type)} (${s.codec_name})\n`;
+          if (s.codec_type === 'video') {
+            txt += `  - 分辨率: ${s.width}x${s.height} (DAR: ${s.dar || '16:9'}, SAR: ${s.sar || '1:1'})\n`;
+            txt += `  - 帧率: ${s.fps || '-'} fps\n`;
+            txt += `  - 像素格式: ${s.pix_fmt || 'yuv420p'} (${s.bit_depth || '8-bit'})\n`;
+            txt += `  - 流码率: ${s.bit_rate || 'N/A'}\n`;
+          } else if (s.codec_type === 'audio') {
+            txt += `  - 采样率: ${s.sample_rate || '48000 Hz'}\n`;
+            txt += `  - 声道: ${s.channel_layout || 'stereo'}\n`;
+            txt += `  - 采样格式: ${s.sample_fmt || 'fltp'}\n`;
+            txt += `  - 流码率: ${s.bit_rate || 'N/A'}\n`;
+          }
+          txt += `  - 语言: ${s.language || 'und'}\n\n`;
+        });
+
+        if (Object.keys(d.format.tags).length > 0) {
+          txt += `[Tags / Metadata]\n`;
+          for (const [k, v] of Object.entries(d.format.tags)) {
+            txt += `  ${k}: ${v}\n`;
+          }
+        }
+
+        if (d.exif && (d.exif.hasExif || d.exif.dpi)) {
+          const ex = d.exif;
+          txt += `\n[EXIF Photography & DPI]\n`;
+          if (ex.camera && (ex.camera.make || ex.camera.model)) {
+            txt += `  - 拍摄器材: ${ex.camera.make || ''} ${ex.camera.model || ''}\n`;
+          }
+          if (ex.camera && (ex.camera.lensModel || ex.camera.lensSpec)) {
+            const lensStr = ex.camera.lensModel || (Array.isArray(ex.camera.lensSpec) ? `${ex.camera.lensSpec[0]}-${ex.camera.lensSpec[1]}mm` : ex.camera.lensSpec);
+            txt += `  - 镜头规格: ${lensStr}\n`;
+          }
+          if (ex.camera && ex.camera.bodySerialNumber) {
+            txt += `  - 机身序列号: ${ex.camera.bodySerialNumber}\n`;
+          }
+          if (ex.dpi) {
+            txt += `  - 打印分辨率: ${ex.dpi.text} (${ex.dpi.unit})\n`;
+          }
+          if (ex.exposure) {
+            if (ex.exposure.exposureTimeFormatted) txt += `  - 快门速度: ${ex.exposure.exposureTimeFormatted}\n`;
+            if (ex.exposure.fNumber) txt += `  - 光圈大小: f/${ex.exposure.fNumber}\n`;
+            if (ex.exposure.iso) txt += `  - 感光度: ISO ${ex.exposure.iso}\n`;
+            if (ex.exposure.focalLength) txt += `  - 焦距: ${ex.exposure.focalLength} mm\n`;
+            if (ex.exposure.exposureProgramText) txt += `  - 曝光模式: ${ex.exposure.exposureProgramText}\n`;
+            if (ex.exposure.dateTimeOriginal) txt += `  - 拍摄时间: ${ex.exposure.dateTimeOriginal} (时区: ${ex.exposure.offsetTime || '未注'})\n`;
+          }
+          if (ex.gps) {
+            txt += `  - GPS 纬度: ${ex.gps.latitudeDMS} (${ex.gps.latitude.toFixed(6)}°)\n`;
+            txt += `  - GPS 经度: ${ex.gps.longitudeDMS} (${ex.gps.longitude.toFixed(6)}°)\n`;
+            if (ex.gps.altitudeFormatted) txt += `  - GPS 海拔: ${ex.gps.altitudeFormatted}\n`;
+          }
+        }
+        txt += `====================================\n`;
+        return txt;
+      }
+
+      ui.btnCopySummary.addEventListener('click', () => {
+        const summary = generateTextSummary();
+        copyToClipboard(summary, '已复制媒体诊断报告！');
+      });
+
+      ui.btnQuickCopyReport.addEventListener('click', () => {
+        const summary = generateTextSummary();
+        copyToClipboard(summary, '已复制完整参数简报！');
+      });
+
+      function downloadJson() {
+        if (!currentParsedData) return;
+        const json = buildFFprobeJson(currentParsedData);
+        const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${currentFile.name.replace(/\.[^/.]+$/, '')}_ffprobe.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('JSON 文件已成功导出！');
+      }
+
+      ui.btnExportJson.addEventListener('click', downloadJson);
+      ui.btnDownloadJsonFile.addEventListener('click', downloadJson);
+
+      ui.btnCopyJsonDirect.addEventListener('click', () => {
+        if (!currentParsedData) return;
+        const json = buildFFprobeJson(currentParsedData);
+        copyToClipboard(JSON.stringify(json, null, 2), '已复制标准 ffprobe JSON！');
+      });
+
+      ui.btnCopyRawLog.addEventListener('click', () => {
+        copyToClipboard(rawLogLines.join('\n'), '已复制全部控制台原始日志！');
+      });
+
+      ui.btnReUpload.addEventListener('click', () => {
+        ui.mediaInput.value = '';
+        ui.mediaInput.click();
+      });
+
+      // --- 拖拽与文件选择事件绑定 ---
+      ui.dropZone.addEventListener('click', () => ui.mediaInput.click());
+
+      ui.dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        ui.dropZone.classList.add('border-indigo-500', 'bg-indigo-50/50', 'dark:bg-indigo-950/20');
+      });
+
+      ui.dropZone.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        ui.dropZone.classList.remove('border-indigo-500', 'bg-indigo-50/50', 'dark:bg-indigo-950/20');
+      });
+
+      ui.dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        ui.dropZone.classList.remove('border-indigo-500', 'bg-indigo-50/50', 'dark:bg-indigo-950/20');
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          processMediaFile(e.dataTransfer.files[0]);
+        }
+      });
+
+      ui.mediaInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files.length > 0) {
+          processMediaFile(e.target.files[0]);
+        }
+      });
+
+    </script>
+  </body>
+</html>
