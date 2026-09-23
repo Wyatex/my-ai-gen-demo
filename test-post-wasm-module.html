@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<body>
+<div id="res">Testing postMessage(WebAssembly.Module + Shared wasmMemory)...</div>
+<script>
+const res = document.getElementById('res');
+function log(msg) {
+  res.innerHTML += '<br>' + msg;
+  console.log(msg);
+}
+
+(async () => {
+  try {
+    log('1. Compiling a minimal WebAssembly module...');
+    const bytes = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
+    const wasmModule = await WebAssembly.compile(bytes);
+    
+    log('2. Creating shared wasmMemory (1GB)...');
+    const wasmMemory = new WebAssembly.Memory({
+      initial: 1073741824 / 65536,
+      maximum: 1073741824 / 65536,
+      shared: true
+    });
+    log('wasmMemory buffer byteLength: ' + wasmMemory.buffer.byteLength);
+
+    log('3. Creating worker from assets URL: /assets/@ffmpeg/core-mt@0.12.6/dist/esm/ffmpeg-core.worker.js');
+    const worker = new Worker('/assets/@ffmpeg/core-mt@0.12.6/dist/esm/ffmpeg-core.worker.js');
+
+    worker.onmessage = (e) => {
+      log('🎉 Worker onmessage: ' + JSON.stringify(e.data));
+    };
+    worker.onerror = (e) => {
+      log('❌ Worker onerror: ' + e.message + ' at ' + e.filename + ':' + e.lineno);
+    };
+
+    log('4. Posting message to worker...');
+    try {
+      worker.postMessage({
+        cmd: 'load',
+        handlers: [],
+        urlOrBlob: window.location.origin + '/assets/@ffmpeg/core-mt@0.12.6/dist/esm/ffmpeg-core.js',
+        wasmMemory,
+        wasmModule
+      });
+      log('postMessage did not throw!');
+    } catch (err) {
+      log('❌ postMessage THREW: ' + err.name + ': ' + err.message);
+    }
+
+    for (let i = 0; i < 5; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      log(`T+${i + 1}s`);
+    }
+  } catch (err) {
+    log('❌ Top error: ' + err.message);
+  }
+})();
+</script>
+</body>
+</html>

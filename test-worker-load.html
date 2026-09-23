@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<div id="output">Testing Worker cmd:load...</div>
+<script>
+const out = document.getElementById('output');
+function log(...args) {
+  const line = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+  out.innerHTML += '<br>' + line.replace(/</g, '&lt;');
+  console.log(...args);
+}
+
+(async () => {
+  try {
+    const baseURL = new URL('./assets/@ffmpeg/core-mt@0.12.6/dist/esm', window.location.href).href;
+    const workerURL = `${baseURL}/ffmpeg-core.worker.js`;
+    const coreURL = `${baseURL}/ffmpeg-core.js`;
+    const wasmURL = `${baseURL}/ffmpeg-core.wasm`;
+
+    log('Creating worker from:', workerURL);
+    const worker = new Worker(workerURL);
+
+    worker.onmessage = (e) => {
+      log('MAIN GOT MSG FROM WORKER:', JSON.stringify(e.data));
+    };
+    worker.onerror = (e) => {
+      log('MAIN GOT WORKER ERROR:', e.message, e.filename, e.lineno);
+    };
+
+    // We need shared wasmMemory and wasmModule to send cmd:load
+    log('Fetching WASM...');
+    const wasmRes = await fetch(wasmURL);
+    const wasmBuffer = await wasmRes.arrayBuffer();
+    log('WASM fetched, byteLength:', wasmBuffer.byteLength);
+
+    log('Compiling WASM...');
+    const wasmModule = await WebAssembly.compile(wasmBuffer);
+    log('WASM compiled successfully!');
+
+    const wasmMemory = new WebAssembly.Memory({
+      initial: 1073741824 / 65536,
+      maximum: 1073741824 / 65536,
+      shared: true
+    });
+    log('Shared wasmMemory created!');
+
+    const mainScriptUrlOrBlob = `${coreURL}#${btoa(JSON.stringify({ wasmURL, workerURL }))}`;
+    log('Posting cmd:load to worker...');
+    worker.postMessage({
+      cmd: 'load',
+      handlers: [],
+      urlOrBlob: mainScriptUrlOrBlob,
+      wasmMemory,
+      wasmModule
+    });
+
+    log('Waiting for worker response...');
+    for (let i = 0; i < 10; i++) {
+      await new Promise(r => setTimeout(r, 500));
+      log('T+' + ((i + 1) * 500) + 'ms');
+    }
+  } catch (err) {
+    log('ERROR:', err.name, err.message, err.stack);
+  }
+})();
+</script>
+</body>
+</html>

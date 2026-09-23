@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<div id="output">Testing dynamic import...</div>
+<script type="module">
+const out = document.getElementById('output');
+function log(msg) {
+  out.innerHTML += '<br>' + msg;
+  console.log(msg);
+}
+
+(async () => {
+  try {
+    const code = 'export default function(Module) { console.log("inside exported function"); return "SUCCESS"; }';
+    const blob = new Blob([code], { type: 'text/javascript' });
+    const blobUrl = URL.createObjectURL(blob);
+    log('Blob URL: ' + blobUrl);
+
+    // Test 1: import plain blob URL
+    try {
+      const mod1 = await import(blobUrl);
+      log('Test 1 (plain blob): ' + mod1.default({}));
+    } catch (e1) {
+      log('Test 1 failed: ' + e1.message);
+    }
+
+    // Test 2: import blob URL with hash
+    const blobUrlWithHash = blobUrl + '#hello=world&wasmURL=test';
+    log('Blob URL with hash: ' + blobUrlWithHash);
+    try {
+      const mod2 = await import(blobUrlWithHash);
+      log('Test 2 (blob with hash): ' + mod2.default({}));
+    } catch (e2) {
+      log('Test 2 failed: ' + e2.message);
+    }
+  } catch (err) {
+    log('Top error: ' + err.message);
+  }
+})();
+</script>
+</body>
+</html>

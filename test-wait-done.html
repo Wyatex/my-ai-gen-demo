@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<body>
+<div id="res">Starting...</div>
+<script>
+const res = document.getElementById('res');
+function log(msg) {
+  res.innerHTML += '<br>' + msg;
+}
+
+const origLog = console.log;
+const origErr = console.error;
+console.log = (...args) => { origLog(...args); log(args.join(' ')); };
+console.error = (...args) => { origErr(...args); log('[ERR] ' + args.join(' ')); };
+
+window.done = false;
+let ticks = 0;
+function poll() {
+  ticks++;
+  if (!window.done && ticks < 150) {
+    setTimeout(poll, 100);
+  }
+}
+setTimeout(poll, 100);
+
+(async () => {
+  try {
+    log('1. Importing ffmpeg-core.js...');
+    const m = await import('/assets/@ffmpeg/core-mt@0.12.6/dist/esm/ffmpeg-core.js');
+    log('Imported successfully! Calling createFFmpegCore()...');
+
+    const baseURL = window.location.origin + '/assets/@ffmpeg/core-mt@0.12.6/dist/esm';
+    const coreURL = `${baseURL}/ffmpeg-core.js`;
+    const wasmURL = `${baseURL}/ffmpeg-core.wasm`;
+    const workerURL = `${baseURL}/ffmpeg-core.worker.js`;
+
+    const core = await m.default({
+      mainScriptUrlOrBlob: `${coreURL}#${btoa(JSON.stringify({ wasmURL, workerURL }))}`,
+      print: (msg) => log('[CORE OUT] ' + msg),
+      printErr: (msg) => log('[CORE ERR] ' + msg),
+      monitorRunDependencies: (left) => log(`[DEP] Remaining dependencies: ${left}`),
+      onAbort: (msg) => log(`[ABORT] ${msg}`),
+      locateFile: (path, prefix) => {
+        log('locateFile: ' + path);
+        if (path.endsWith('.wasm')) return wasmURL;
+        if (path.endsWith('.worker.js')) return workerURL;
+        return prefix + path;
+      }
+    });
+
+    log('🎉🎉🎉 createFFmpegCore SUCCESS! Core: ' + typeof core);
+    window.done = true;
+  } catch (err) {
+    log('❌ Error: ' + err.message + ' ' + err.stack);
+    window.done = true;
+  }
+})();
+</script>
+</body>
+</html>

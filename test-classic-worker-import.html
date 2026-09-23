@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<div id="output">Testing classic worker dynamic import...</div>
+<script>
+const out = document.getElementById('output');
+function log(msg) {
+  out.innerHTML += '<br>' + msg;
+  console.log(msg);
+}
+
+(async () => {
+  try {
+    // 1. Create a module blob that exports default
+    const modCode = 'export default function(M) { return "IMPORTED_MODULE_SUCCESS"; }';
+    const modBlob = new Blob([modCode], { type: 'text/javascript' });
+    const modUrl = URL.createObjectURL(modBlob);
+    log('Module URL: ' + modUrl);
+
+    // 2. Create worker code that runs dynamic import
+    const workerCode = `
+      self.onmessage = async (e) => {
+        try {
+          self.postMessage({ status: 'importing', url: e.data.url });
+          const res = await import(e.data.url);
+          self.postMessage({ status: 'success', result: res.default({}) });
+        } catch (err) {
+          self.postMessage({ status: 'error', error: err.name + ': ' + err.message, stack: err.stack });
+        }
+      };
+    `;
+    const workerBlob = new Blob([workerCode], { type: 'text/javascript' });
+    const workerBlobUrl = URL.createObjectURL(workerBlob);
+    log('Worker Blob URL: ' + workerBlobUrl);
+
+    // Test A: Classic worker
+    log('--- TEST A: Classic Worker (new Worker(url)) ---');
+    const classicWorker = new Worker(workerBlobUrl);
+    classicWorker.onerror = (e) => log('Classic worker onerror: ' + e.message + ' ' + e.filename + ':' + e.lineno);
+    classicWorker.onmessage = (e) => log('Classic worker onmessage: ' + JSON.stringify(e.data));
+    classicWorker.postMessage({ url: modUrl });
+
+    // Test B: Module worker
+    log('--- TEST B: Module Worker (new Worker(url, {type: "module"})) ---');
+    const moduleWorker = new Worker(workerBlobUrl, { type: 'module' });
+    moduleWorker.onerror = (e) => log('Module worker onerror: ' + e.message + ' ' + e.filename + ':' + e.lineno);
+    moduleWorker.onmessage = (e) => log('Module worker onmessage: ' + JSON.stringify(e.data));
+    moduleWorker.postMessage({ url: modUrl });
+
+    await new Promise(r => setTimeout(r, 2000));
+    log('Test complete.');
+  } catch (err) {
+    log('Top error: ' + err.message);
+  }
+})();
+</script>
+</body>
+</html>

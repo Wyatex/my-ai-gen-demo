@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<div id="log">STARTING TEST...</div>
+<script>
+const logEl = document.getElementById('log');
+function append(line) {
+  logEl.innerHTML += '<br>' + String(line).replace(/</g, '&lt;');
+  console.log(line);
+}
+window.onerror = (m, u, l) => append('[WINDOW ERR] ' + m + ' at ' + u + ':' + l);
+window.onunhandledrejection = (e) => append('[UNHANDLED] ' + (e.reason?.message || e.reason));
+</script>
+<script type="module">
+import { FFmpeg } from './assets/@ffmpeg/ffmpeg@0.12.7/dist/esm/index.js';
+
+(async () => {
+  const tickTimer = setInterval(() => {
+    append('[TICK ' + Math.round(performance.now()) + 'ms]');
+  }, 1000);
+
+  try {
+    append('1. Initializing FFmpeg instance...');
+    const ffmpeg = new FFmpeg();
+    ffmpeg.on('log', ({ message }) => append('[CORE LOG] ' + message));
+
+    const baseURL = new URL('./assets/@ffmpeg/core-mt@0.12.6/dist/esm', import.meta.url).href;
+    const coreURL = `${baseURL}/ffmpeg-core.js`;
+    const wasmURL = `${baseURL}/ffmpeg-core.wasm`;
+    const workerURL = `${baseURL}/ffmpeg-core.worker.js`;
+
+    append('2. Calling ffmpeg.load({ coreURL, wasmURL, workerURL })...');
+    const start = performance.now();
+
+    await ffmpeg.load({
+      coreURL,
+      wasmURL,
+      workerURL
+    });
+
+    const elapsed = Math.round(performance.now() - start);
+    append(`🎉🎉🎉 MULTI-THREAD CORE LOADED SUCCESSFULLY in ${elapsed}ms! ffmpeg.loaded = ${ffmpeg.loaded}`);
+
+    // Now test a simple command
+    append('3. Testing ffmpeg.exec(["-version"])...');
+    const ret = await ffmpeg.exec(['-version']);
+    append(`🎉 EXEC RESULT: ${ret} (0 means SUCCESS!)`);
+    clearInterval(tickTimer);
+  } catch (err) {
+    append('❌ CAUGHT ERROR: ' + err.name + ': ' + err.message);
+    clearInterval(tickTimer);
+  }
+})();
+</script>
+</body>
+</html>

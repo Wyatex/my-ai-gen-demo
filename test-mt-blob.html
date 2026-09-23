@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<div id="log">STARTING</div>
+<script>
+const logEl = document.getElementById('log');
+const origLog = console.log;
+const origErr = console.error;
+const origWarn = console.warn;
+function append(prefix, ...args) {
+  const line = prefix + ' ' + args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+  logEl.innerHTML += '<br>' + line.replace(/</g, '&lt;');
+}
+console.log = (...args) => { origLog(...args); append('[LOG]', ...args); };
+console.error = (...args) => { origErr(...args); append('[ERR]', ...args); };
+console.warn = (...args) => { origWarn(...args); append('[WARN]', ...args); };
+window.onerror = (m, u, l) => append('[WINDOW ERR]', m, u, l);
+window.onunhandledrejection = (e) => append('[UNHANDLED]', e.reason?.message || e.reason);
+</script>
+<script type="module">
+import { FFmpeg } from './assets/@ffmpeg/ffmpeg@0.12.7/dist/esm/index.js';
+import { toBlobURL } from './assets/@ffmpeg/util@0.12.1/dist/esm/index.js';
+
+(async () => {
+  try {
+    console.log('Testing createFFmpeg...');
+    const ffmpeg = new FFmpeg();
+    ffmpeg.on('log', ({ message }) => console.log('[FFMPEG_LOG]', message));
+
+    const baseURL = new URL('./assets/@ffmpeg/core-mt@0.12.6/dist/esm', import.meta.url).href;
+    console.log('baseURL:', baseURL);
+
+    const coreURL = await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript');
+    const wasmURL = await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm');
+    const workerURL = await toBlobURL(`${baseURL}/ffmpeg-core.worker.js`, 'text/javascript');
+    console.log('coreURL:', coreURL);
+    console.log('workerURL:', workerURL);
+
+    console.log('Calling ffmpeg.load...');
+    const p1 = ffmpeg.load({ coreURL, wasmURL, workerURL });
+    const p2 = new Promise((_, rej) => setTimeout(() => rej(new Error('TIMEOUT 6s')), 6000));
+    await Promise.race([p1, p2]);
+    console.log('🎉🎉🎉 LOAD FINISHED SUCCESSFULLY! ffmpeg.loaded =', ffmpeg.loaded);
+  } catch (err) {
+    console.error('TOP LEVEL CAUGHT:', err.name, err.message);
+  }
+})();
+</script>
+</body>
+</html>

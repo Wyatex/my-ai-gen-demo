@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<body>
+<div id="res">Loading...</div>
+<script type="module">
+const res = document.getElementById('res');
+function log(msg) {
+  res.innerHTML += '<br>' + msg;
+  console.log(msg);
+}
+
+const startTime = performance.now();
+const tick = setInterval(() => {
+  log(`T+${Math.round(performance.now() - startTime)}ms`);
+}, 1000);
+
+try {
+  log('Importing...');
+  const m = await import('./assets/@ffmpeg/core-mt@0.12.6/dist/esm/ffmpeg-core.js');
+  log('IMPORTED: ' + typeof m.default);
+
+  log('Calling createFFmpegCore()...');
+  const baseURL = new URL('./assets/@ffmpeg/core-mt@0.12.6/dist/esm', window.location.href).href;
+  const coreURL = `${baseURL}/ffmpeg-core.js`;
+  const wasmURL = `${baseURL}/ffmpeg-core.wasm`;
+  const workerURL = `${baseURL}/ffmpeg-core.worker.js`;
+
+  const core = await m.default({
+    mainScriptUrlOrBlob: `${coreURL}#${btoa(JSON.stringify({ wasmURL, workerURL }))}`,
+    print: (msg) => log('[CORE OUT] ' + msg),
+    printErr: (msg) => log('[CORE ERR] ' + msg),
+    monitorRunDependencies: (left) => log(`[DEP] Remaining dependencies: ${left}`),
+    onAbort: (msg) => log(`[ABORT] ${msg}`),
+    locateFile: (path, prefix) => {
+      log('locateFile: ' + path);
+      if (path.endsWith('.wasm')) return wasmURL;
+      if (path.endsWith('.worker.js')) return workerURL;
+      return prefix + path;
+    }
+  });
+
+  log('🎉🎉🎉 createFFmpegCore SUCCESS! Core: ' + typeof core);
+  clearInterval(tick);
+} catch (e) {
+  log('❌ ERROR: ' + e.message + '<br>' + e.stack);
+  clearInterval(tick);
+}
+</script>
+</body>
+</html>

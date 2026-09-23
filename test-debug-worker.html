@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<div id="output">Starting debug...</div>
+<script>
+const out = document.getElementById('output');
+function log(...args) {
+  const line = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+  out.innerHTML += '<br>' + line.replace(/</g, '&lt;');
+  console.log(...args);
+}
+
+(async () => {
+  try {
+    const baseURL = new URL('./assets/@ffmpeg/core-mt@0.12.6/dist/esm', window.location.href).href;
+    log('Base URL:', baseURL);
+
+    // Let's create an instrumented worker that does what worker.js does
+    const debugWorkerCode = `
+      function wlog(...args) {
+        self.postMessage({ type: 'DEBUG_LOG', msg: args.join(' ') });
+      }
+      self.onerror = (e) => {
+        wlog('WORKER ONERROR:', e.message, e.filename, e.lineno);
+      };
+      self.onunhandledrejection = (e) => {
+        wlog('WORKER ONUNHANDLEDREJECTION:', e.reason?.message || e.reason, e.reason?.stack);
+      };
+
+      self.onmessage = async (e) => {
+        wlog('Worker received message:', JSON.stringify(e.data));
+        const { coreURL, wasmURL, workerURL } = e.data;
+        try {
+          wlog('Importing coreURL:', coreURL);
+          const coreModule = await import(coreURL);
+          wlog('coreModule imported successfully. default type:', typeof coreModule.default);
+          
+          wlog('Calling createFFmpegCore...');
+          const mainScriptUrlOrBlob = \`\${coreURL}#\${btoa(JSON.stringify({ wasmURL, workerURL }))}\`;
+          wlog('mainScriptUrlOrBlob:', mainScriptUrlOrBlob);
+
+          const core = await coreModule.default({
+            mainScriptUrlOrBlob,
+            print: (txt) => wlog('[CORE_OUT]', txt),
+            printErr: (txt) => wlog('[CORE_ERR]', txt),
+            locateFile: (path, prefix) => {
+              wlog('locateFile called with path:', path, 'prefix:', prefix);
+              if (path.endsWith('.wasm')) return wasmURL;
+              if (path.endsWith('.worker.js')) return workerURL;
+              return prefix + path;
+            }
+          });
+          wlog('createFFmpegCore returned successfully! core:', typeof core);
+          self.postMessage({ type: 'SUCCESS' });
+        } catch (err) {
+          wlog('CATCH IN WORKER:', err.name, err.message, err.stack);
+          self.postMessage({ type: 'FAIL', err: err.message });
+        }
+      };
+    `;
+
+    const blob = new Blob([debugWorkerCode], { type: 'text/javascript' });
+    const debugWorkerUrl = URL.createObjectURL(blob);
+    const worker = new Worker(debugWorkerUrl, { type: 'module' });
+
+    worker.onmessage = (e) => {
+      log('[FROM_WORKER]', JSON.stringify(e.data));
+    };
+    worker.onerror = (e) => {
+      log('[WORKER_ERR]', e.message, e.filename, e.lineno);
+    };
+
+    // Prepare URLs (first test with direct HTTP URLs, then test with Blob URLs)
+    const coreURL = `${baseURL}/ffmpeg-core.js`;
+    const wasmURL = `${baseURL}/ffmpeg-core.wasm`;
+    const workerURL = `${baseURL}/ffmpeg-core.worker.js`;
+
+    log('Posting message to debug worker with direct HTTP URLs...');
+    worker.postMessage({ coreURL, wasmURL, workerURL });
+
+    await new Promise(r => setTimeout(r, 6000));
+    log('Done waiting 6s.');
+  } catch (err) {
+    log('Top error:', err.message);
+  }
+})();
+</script>
+</body>
+</html>

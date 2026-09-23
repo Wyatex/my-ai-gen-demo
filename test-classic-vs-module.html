@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<body>
+<div id="res">Starting test...</div>
+<script>
+const res = document.getElementById('res');
+function log(msg) {
+  res.innerHTML += '<br>' + msg;
+  console.log(msg);
+}
+
+window.done = false;
+let ticks = 0;
+function poll() {
+  ticks++;
+  if (!window.done && ticks < 100) {
+    setTimeout(poll, 100);
+  }
+}
+setTimeout(poll, 100);
+
+(async () => {
+  // Use http worker
+  const worker = new Worker('/test-http-worker.js');
+  worker.onmessage = (e) => {
+    log('Worker msg: ' + JSON.stringify(e.data));
+    if (e.data.status !== 'attempting_import') window.done = true;
+  };
+  worker.onerror = (e) => {
+    log('Worker error: ' + e.message);
+    window.done = true;
+  };
+
+  log('Posting import command for /test-core-copy.js...');
+  worker.postMessage({ url: window.location.origin + '/test-core-copy.js' });
+})();
+</script>
+</body>
+</html>
