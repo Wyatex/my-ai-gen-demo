@@ -1,0 +1,2687 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Web 本地多媒体格式转换工坊 (FFmpeg.wasm · 图像/音频/视频全能转码)</title>
+    <!-- 静默注销所有历史 Service Worker，杜绝旧缓存干扰，由 Node 原生响应头接管 -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(regs => {
+          regs.forEach(r => r.unregister());
+        }).catch(() => {});
+      }
+    </script>
+    <!-- 本地化 Tailwind CSS，彻底避免跨域隔离策略 (COEP require-corp) 拦截外部 CDN 资源 -->
+    <script src="./assets/tailwindcss.min.js"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                50: '#eef2ff',
+                100: '#e0e7ff',
+                200: '#c7d2fe',
+                400: '#818cf8',
+                500: '#6366f1',
+                600: '#4f46e5',
+                700: '#4338ca',
+              },
+            },
+          },
+        },
+      }
+      // 初始化深浅色主题
+      if (
+        localStorage.theme === 'dark' ||
+        (!('theme' in localStorage) &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches)
+      ) {
+        document.documentElement.classList.add('dark')
+      } else {
+        document.documentElement.classList.remove('dark')
+      }
+    </script>
+    <style>
+      html {
+        scroll-behavior: smooth;
+      }
+      /* 自定义滚动条 */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(156, 163, 175, 0.4);
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(156, 163, 175, 0.7);
+      }
+      .code-font {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      }
+      /* 透明网格棋盘背景 (用于展示透明 PNG/WebP/GIF) */
+      .checkerboard-bg {
+        background-color: #f8fafc;
+        background-image: linear-gradient(45deg, #e2e8f0 25%, transparent 25%),
+                          linear-gradient(-45deg, #e2e8f0 25%, transparent 25%),
+                          linear-gradient(45deg, transparent 75%, #e2e8f0 75%),
+                          linear-gradient(-45deg, transparent 75%, #e2e8f0 75%);
+        background-size: 16px 16px;
+        background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+      }
+      .dark .checkerboard-bg {
+        background-color: #0f172a;
+        background-image: linear-gradient(45deg, #1e293b 25%, transparent 25%),
+                          linear-gradient(-45deg, #1e293b 25%, transparent 25%),
+                          linear-gradient(45deg, transparent 75%, #1e293b 75%),
+                          linear-gradient(-45deg, transparent 75%, #1e293b 75%);
+        background-size: 16px 16px;
+        background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+      }
+      /* 隐藏 number 输入框的上下箭头 */
+      input[type='number']::-webkit-inner-spin-button,
+      input[type='number']::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      input[type='number'] {
+        -moz-appearance: textfield;
+      }
+    </style>
+  </head>
+  <body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen transition-colors duration-300 font-sans flex flex-col">
+    <!-- 顶部导航栏 -->
+    <header class="border-b border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md sticky top-0 z-40 transition-colors">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+            </svg>
+          </div>
+          <div>
+            <h1 class="font-bold text-lg leading-tight bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 via-purple-500 to-pink-500 dark:from-indigo-400 dark:via-purple-300 dark:to-pink-300">
+              Media Transcoder Pro
+            </h1>
+            <p class="text-xs text-slate-500 dark:text-slate-400 font-medium">音视频与图像全能转码 · 纯本地 FFmpeg.wasm 驱动 · 0 字节上传</p>
+          </div>
+        </div>
+
+        <!-- 导航操作与主题切换 -->
+        <div class="flex items-center space-x-2 sm:space-x-3">
+          <!-- 核心引擎状态指示器 (支持点击切换) -->
+          <div id="engineStatusBadge" class="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-mono border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 cursor-pointer select-none transition hover:opacity-90" title="当前写死为多线程模式 (点击可切换 多线程 / 单线程)">
+            <span id="engineStatusDot" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span id="engineStatusText">⚡ 强制多线程 (Core-MT)</span>
+          </div>
+
+          <a href="./media-info.html" class="px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition hidden md:flex items-center space-x-1" title="媒体探测器">
+            <span>🔍 媒体探测</span>
+          </a>
+          <a href="./audio-clip.html" class="px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition hidden md:flex items-center space-x-1" title="音频剪切">
+            <span>✂️ 音频剪切</span>
+          </a>
+          <!-- 返回首页链接 -->
+          <a href="./index.html" class="p-2 rounded-lg text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="返回首页">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+            </svg>
+          </a>
+
+          <!-- 深浅色切换按钮 -->
+          <button id="themeToggle" class="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition" title="切换深浅主题">
+            <svg id="sunIcon" class="w-5 h-5 hidden dark:block text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"></path>
+            </svg>
+            <svg id="moonIcon" class="w-5 h-5 block dark:hidden text-indigo-600" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- 主体容器 -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full flex flex-col space-y-8">
+      
+      <!-- 1. 上传拖拽区域 (支持多文件批量添加) -->
+      <section id="uploadSection" class="relative group">
+        <input type="file" id="mediaInput" multiple class="hidden" accept="video/*,audio/*,image/*,.flv,.mp4,.mkv,.webm,.mov,.avi,.wmv,.ts,.mp3,.wav,.flac,.aac,.ogg,.m4a,.opus,.jpg,.jpeg,.png,.webp,.gif,.bmp,.tiff,.ico" />
+        
+        <div id="dropZone" class="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-400 bg-white/60 dark:bg-slate-800/50 backdrop-blur rounded-2xl p-8 sm:p-10 text-center cursor-pointer transition-all duration-300 group-hover:shadow-lg group-hover:shadow-indigo-500/5">
+          <div class="max-w-xl mx-auto flex flex-col items-center">
+            <div class="w-16 h-16 mb-4 rounded-2xl bg-indigo-50 dark:bg-slate-700/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center group-hover:scale-110 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300 shadow-sm">
+              <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+              </svg>
+            </div>
+            
+            <h2 class="text-lg sm:text-xl font-semibold mb-2 text-slate-800 dark:text-slate-100">
+              拖拽图像、音频或视频至此处，或 <span class="text-indigo-600 dark:text-indigo-400 underline underline-offset-4 decoration-indigo-300 dark:decoration-indigo-700">点击批量选择文件</span>
+            </h2>
+            <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mb-4">
+              纯前端 WebAssembly 极速转码 · 浏览器沙盒运行 · 0 数据上传保护隐私 · 支持批量队列处理
+            </p>
+            
+            <!-- 格式徽标 -->
+            <div class="flex items-center gap-2 flex-wrap text-[11px] font-mono justify-center">
+              <span class="px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-300">🎬 MP4/WebM/MKV/MOV/AVI</span>
+              <span class="px-2 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/50 text-teal-600 dark:text-teal-300">🎵 MP3/WAV/FLAC/AAC/M4A</span>
+              <span class="px-2 py-0.5 rounded-full bg-pink-50 dark:bg-pink-950/50 text-pink-600 dark:text-pink-300">🖼️ JPG/PNG/WebP/GIF/ICO</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. 小白快速预设与配置管理中心 (新手极速模式) -->
+      <section class="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200/90 dark:border-slate-700/80 shadow-sm">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-slate-700/60">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="text-xl">⚡</span>
+              <h3 class="font-bold text-base text-slate-800 dark:text-slate-100">小白极速预设方案</h3>
+              <span id="activePresetBadge" class="hidden px-2.5 py-0.5 text-xs font-semibold rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">
+                当前: 微信秒发
+              </span>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">一键配置最佳转码参数，小白无需理解复杂编码原理即可导出优质效果</p>
+          </div>
+
+          <!-- 预设操作管理按钮组 (保存配置、导入导出) -->
+          <div class="flex items-center flex-wrap gap-2 text-xs">
+            <button id="btnOpenSavePresetModal" class="px-3 py-1.5 rounded-xl font-medium bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/80 text-indigo-600 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800 flex items-center space-x-1.5 transition">
+              <span>➕ 保存当前为新预设</span>
+            </button>
+            <label for="importPresetInput" class="px-3 py-1.5 rounded-xl font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 flex items-center space-x-1.5 cursor-pointer transition">
+              <span>📥 导入配置 (JSON)</span>
+              <input type="file" id="importPresetInput" accept=".json" class="hidden" />
+            </label>
+            <button id="btnExportPresets" class="px-3 py-1.5 rounded-xl font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 flex items-center space-x-1.5 transition">
+              <span>📤 导出配置 (JSON)</span>
+            </button>
+            <button id="btnResetPresets" class="px-3 py-1.5 rounded-xl font-medium text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition" title="恢复出厂内置预设">
+              <span>🔄 恢复默认</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 预设分类过滤选项卡 -->
+        <div class="flex items-center space-x-2 overflow-x-auto pb-3 mb-3 text-xs font-medium">
+          <button data-cat="all" class="preset-cat-btn px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-semibold shadow-sm transition">全部推荐</button>
+          <button data-cat="video" class="preset-cat-btn px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/60 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition">🎬 视频转换</button>
+          <button data-cat="audio" class="preset-cat-btn px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/60 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition">🎵 音频转换</button>
+          <button data-cat="image" class="preset-cat-btn px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/60 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition">🖼️ 图像转换</button>
+          <button data-cat="custom" class="preset-cat-btn px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/60 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition">⭐ 我的自定义</button>
+        </div>
+
+        <!-- 预设卡片列表网格 (动态渲染) -->
+        <div id="presetsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          <!-- 由 JS 渲染 -->
+        </div>
+      </section>
+
+      <!-- 3. 主转码控制工作台 (队列、对比预览、专业配置参数) -->
+      <div id="mainWorkspace" class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        <!-- 左侧栏 (占 5 列): 文件批处理队列 & 转换前后对比预览 -->
+        <div class="lg:col-span-5 space-y-6">
+          
+          <!-- 文件队列管理卡片 -->
+          <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-200/90 dark:border-slate-700/80 shadow-sm">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center space-x-2">
+                <span class="text-base font-bold text-slate-800 dark:text-slate-100">待转码文件队列</span>
+                <span id="queueCountBadge" class="px-2 py-0.5 text-xs font-mono rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">0</span>
+              </div>
+              <div class="flex items-center space-x-2 text-xs">
+                <button id="btnClearQueue" class="text-slate-400 hover:text-red-500 transition px-2 py-1">清空列表</button>
+              </div>
+            </div>
+
+            <!-- 队列列表容器 -->
+            <div id="fileQueueList" class="space-y-2 max-h-72 overflow-y-auto pr-1">
+              <div id="emptyQueueTip" class="py-8 text-center text-xs text-slate-400 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
+                暂无待转码文件，请点击上方区域或拖入文件
+              </div>
+            </div>
+
+            <!-- 批量转码主按钮 -->
+            <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700/60 flex flex-col gap-2">
+              <button id="btnStartBatch" disabled class="w-full py-3 px-4 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 hover:from-indigo-600 hover:via-purple-600 hover:to-pink-600 text-white rounded-xl shadow-md shadow-indigo-500/20 font-bold text-sm transition-all flex items-center justify-center space-x-2 disabled:opacity-40 disabled:cursor-not-allowed">
+                <span>🚀 开始转换队列文件</span>
+              </button>
+              <div class="flex items-center justify-between text-xs text-slate-400 px-1">
+                <span>单文件处理完成后自动流转</span>
+                <button id="btnDownloadAllCompleted" class="hidden text-indigo-500 hover:text-indigo-600 font-medium transition">📦 打包/依次下载全部</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 转换前后实时对比与播放预览卡片 -->
+          <div id="previewCard" class="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-200/90 dark:border-slate-700/80 shadow-sm space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+                <span>👁️ 当前选中媒体对比预览</span>
+              </h3>
+              <span id="previewMediaBadge" class="px-2 py-0.5 text-xs font-mono rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                未选择
+              </span>
+            </div>
+
+            <!-- 原文件预览区 -->
+            <div class="space-y-1.5">
+              <div class="flex justify-between items-center text-xs">
+                <span class="font-medium text-slate-500 dark:text-slate-400">原始输入源:</span>
+                <span id="origSizeLabel" class="font-mono text-slate-600 dark:text-slate-300">0 B</span>
+              </div>
+              <div id="origPreviewBox" class="w-full h-44 bg-slate-100 dark:bg-slate-900 rounded-xl flex items-center justify-center overflow-hidden border border-slate-200 dark:border-slate-700 relative">
+                <span class="text-xs text-slate-400">选择文件后在此预览</span>
+              </div>
+            </div>
+
+            <!-- 转换后输出预览区 -->
+            <div class="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-700/60">
+              <div class="flex justify-between items-center text-xs">
+                <span class="font-medium text-slate-500 dark:text-slate-400">转码输出效果:</span>
+                <div class="flex items-center space-x-2 font-mono">
+                  <span id="outputSizeLabel" class="text-slate-600 dark:text-slate-300">-</span>
+                  <span id="outputDiffBadge" class="hidden px-1.5 py-0.2 rounded text-[11px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">-</span>
+                </div>
+              </div>
+              <div id="outputPreviewBox" class="w-full h-44 bg-slate-100 dark:bg-slate-900 rounded-xl flex items-center justify-center overflow-hidden border border-slate-200 dark:border-slate-700 relative">
+                <span class="text-xs text-slate-400">转换成功后在此实时预览与下载</span>
+              </div>
+              <!-- 输出操作按钮 -->
+              <div id="outputActionBox" class="hidden pt-2 flex items-center gap-2">
+                <button id="btnDownloadCurrent" class="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold transition flex items-center justify-center space-x-1.5 shadow-sm">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                  <span>立即下载该输出文件</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 右侧栏 (占 7 列): 细粒度参数配置、CLI 命令行实时生成、控制台日志 -->
+        <div class="lg:col-span-7 space-y-6">
+          
+          <!-- 转码参数配置主卡片 -->
+          <div class="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200/90 dark:border-slate-700/80 shadow-sm">
+            
+            <!-- 工作模式切换 Tabs -->
+            <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3 mb-5">
+              <div class="flex items-center space-x-1 sm:space-x-2 text-xs sm:text-sm font-semibold">
+                <button id="tabBtnOptions" class="px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 transition">⚙️ 详细参数</button>
+                <button id="tabBtnCli" class="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700 transition">🛠️ CLI 与高阶定制</button>
+                <button id="tabBtnLogs" class="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700 transition">💻 终端实时日志</button>
+              </div>
+
+              <!-- 媒体类别切换 (当用户想要手动强制转换逻辑时) -->
+              <div class="flex items-center space-x-1 bg-slate-100 dark:bg-slate-700 p-0.5 rounded-lg text-xs">
+                <button id="mediaTypeTabVideo" class="px-2.5 py-1 rounded-md bg-white dark:bg-slate-800 shadow-xs font-semibold text-slate-800 dark:text-slate-100 transition">🎬 视频</button>
+                <button id="mediaTypeTabAudio" class="px-2.5 py-1 rounded-md text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition">🎵 音频</button>
+                <button id="mediaTypeTabImage" class="px-2.5 py-1 rounded-md text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition">🖼️ 图像</button>
+              </div>
+            </div>
+
+            <!-- Tab 1 内容: 细粒度参数表单 -->
+            <div id="tabContentOptions" class="space-y-6">
+              
+              <!-- 全局 CPU 多线程并发加速控制器 -->
+              <div class="p-3 bg-gradient-to-r from-indigo-50/80 via-purple-50/80 to-blue-50/80 dark:from-indigo-950/40 dark:via-purple-950/40 dark:to-blue-950/40 rounded-xl border border-indigo-200/80 dark:border-indigo-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div class="flex items-center space-x-2.5">
+                  <div class="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-sm flex-shrink-0">
+                    ⚡
+                  </div>
+                  <div>
+                    <div class="flex items-center space-x-2">
+                      <span class="font-bold text-slate-800 dark:text-slate-100 text-sm">CPU 并发多线程加速</span>
+                      <span id="detectedCoresBadge" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300">探测中...</span>
+                    </div>
+                    <p class="text-slate-500 dark:text-slate-400 text-[11px]">可自由设置编码引擎调用的并行线程数，支持跑满全核 CPU 算力</p>
+                  </div>
+                </div>
+                <div class="flex items-center space-x-2 flex-shrink-0">
+                  <label for="mt_thread_count" class="font-medium text-slate-600 dark:text-slate-300 text-xs">并发线程:</label>
+                  <select id="mt_thread_count" class="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 font-semibold focus:outline-indigo-500">
+                    <option value="auto" selected>🔥 自动跑满全核 (极速转码)</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- A. 视频转换参数表单 (Video Form) -->
+              <div id="formSectionVideo" class="space-y-5">
+                <!-- 1. 输出格式与编码器 -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">目标封装容器</label>
+                    <select id="v_format" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:outline-indigo-500">
+                      <option value="mp4">MP4 (通用最广)</option>
+                      <option value="webm">WebM (网页高效)</option>
+                      <option value="mkv">MKV (全能多轨)</option>
+                      <option value="avi">AVI (经典格式)</option>
+                      <option value="mov">MOV (QuickTime)</option>
+                      <option value="flv">FLV (Flash流媒体)</option>
+                      <option value="gif">GIF (动态表情包)</option>
+                      <option value="mp3">提取音频为 MP3</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">视频编码器 (Codec)</label>
+                    <select id="v_codec" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:outline-indigo-500">
+                      <option value="libx264">H.264 / AVC (推荐兼容)</option>
+                      <option value="libvpx-vp9">VP9 (高压缩比)</option>
+                      <option value="libvpx">VP8 (WebM旧兼容)</option>
+                      <option value="mpeg4">MPEG-4 (标准)</option>
+                      <option value="copy">直接拷贝 (Copy·免重编码)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">编码预设速度 (Preset)</label>
+                    <select id="v_preset" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:outline-indigo-500">
+                      <option value="ultrafast">ultrafast (极速转换)</option>
+                      <option value="superfast">superfast (超快)</option>
+                      <option value="veryfast">veryfast (很快)</option>
+                      <option value="faster">faster (较快)</option>
+                      <option value="fast">fast (快)</option>
+                      <option value="medium" selected>medium (平衡均衡)</option>
+                      <option value="slow">slow (慢速高画质)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- 2. 画质与分辨率缩放 -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-700/30 p-4 rounded-xl border border-slate-200/80 dark:border-slate-700/60">
+                  <div>
+                    <div class="flex justify-between items-center mb-1">
+                      <label class="text-xs font-medium text-slate-500 dark:text-slate-400">画质 CRF 控制 (越小越清晰，越大越小)</label>
+                      <span id="v_crf_val" class="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">23 (高保真)</span>
+                    </div>
+                    <input type="range" id="v_crf" min="16" max="38" value="23" class="w-full h-1.5 bg-slate-200 dark:bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
+                    <div class="flex justify-between text-[10px] text-slate-400 mt-1">
+                      <span>16 极致无损</span>
+                      <span>23 默认推荐</span>
+                      <span>28 微信压缩</span>
+                      <span>36 极限省流</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">分辨率缩放 (保持等比)</label>
+                    <select id="v_scale" class="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:outline-indigo-500">
+                      <option value="original">保持原始分辨率</option>
+                      <option value="-2:1080">1080p 全高清 (高: 1080)</option>
+                      <option value="-2:720">720p 高清 (微信推荐, 高: 720)</option>
+                      <option value="-2:480">480p 标清 (高: 480)</option>
+                      <option value="-2:360">360p 省流 (高: 360)</option>
+                      <option value="1080:1920">1080×1920 (短视频竖屏 9:16)</option>
+                      <option value="custom">自定义宽高...</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- 自定义宽高输入 (默认隐藏) -->
+                <div id="v_custom_scale_box" class="hidden grid grid-cols-2 gap-4">
+                  <div>
+                    <span class="text-xs text-slate-400 block mb-1">自定义宽度 (偶数):</span>
+                    <input type="number" id="v_custom_w" placeholder="如 1280" class="w-full px-3 py-1.5 text-xs rounded-lg bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600" />
+                  </div>
+                  <div>
+                    <span class="text-xs text-slate-400 block mb-1">自定义高度 (偶数):</span>
+                    <input type="number" id="v_custom_h" placeholder="如 720" class="w-full px-3 py-1.5 text-xs rounded-lg bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600" />
+                  </div>
+                </div>
+
+                <!-- 3. 音频流处理与帧率控制 -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">音频轨动作</label>
+                    <select id="v_audio_action" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:outline-indigo-500">
+                      <option value="keep">保留并编码音频 (AAC)</option>
+                      <option value="copy">直接拷贝原音频 (Copy)</option>
+                      <option value="mute">去除音频 (纯静音视频 -an)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">音频码率</label>
+                    <select id="v_abitrate" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:outline-indigo-500">
+                      <option value="64k">64 kbps (轻便)</option>
+                      <option value="96k">96 kbps (节省)</option>
+                      <option value="128k" selected>128 kbps (标准)</option>
+                      <option value="192k">192 kbps (高品质)</option>
+                      <option value="320k">320 kbps (最高)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">目标帧率 (FPS)</label>
+                    <select id="v_fps" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:outline-indigo-500">
+                      <option value="original">原始帧率</option>
+                      <option value="15">15 fps (表情包/GIF)</option>
+                      <option value="24">24 fps (电影感)</option>
+                      <option value="30">30 fps (标准视频)</option>
+                      <option value="60">60 fps (流畅高刷)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- 4. 视频特效、旋转与时间范围裁剪 -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">播放速率 (倍速)</label>
+                    <select id="v_speed" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:outline-indigo-500">
+                      <option value="1.0">1.0x 正常速度</option>
+                      <option value="0.5">0.5x 慢放</option>
+                      <option value="0.75">0.75x 稍慢</option>
+                      <option value="1.25">1.25x 轻微加速</option>
+                      <option value="1.5">1.5x 加速</option>
+                      <option value="2.0">2.0x 双倍速</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">画面旋转 / 镜像</label>
+                    <select id="v_rotate" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:outline-indigo-500">
+                      <option value="none">无旋转 (原始方向)</option>
+                      <option value="90">顺时针 90°</option>
+                      <option value="180">旋转 180°</option>
+                      <option value="270">逆时针 90° (270°)</option>
+                      <option value="hflip">水平镜像翻转</option>
+                      <option value="vflip">垂直翻转</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">时间截取范围 (秒)</label>
+                    <div class="flex items-center space-x-1.5">
+                      <input type="number" id="v_trim_start" placeholder="起点(s)" step="0.1" min="0" class="w-1/2 px-2 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600" />
+                      <span class="text-slate-400 text-xs">至</span>
+                      <input type="number" id="v_trim_end" placeholder="终点(s)" step="0.1" min="0" class="w-1/2 px-2 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600" />
+                    </div>
+                  </div>
+                </div>
+
+                <!-- GIF 专属优化开关 (仅当选 GIF 时显现) -->
+                <div id="v_gif_opt_box" class="hidden p-3 bg-purple-50 dark:bg-purple-950/40 rounded-xl border border-purple-200 dark:border-purple-800 flex items-center justify-between text-xs">
+                  <div>
+                    <span class="font-semibold text-purple-700 dark:text-purple-300">✨ 智能调色板滤镜 (Palettegen / Lanczos)</span>
+                    <p class="text-purple-600/80 dark:text-purple-400 text-[11px]">利用 FFmpeg 实时生成高质量色彩调色板，完全消除动图噪点杂色</p>
+                  </div>
+                  <input type="checkbox" id="v_gif_palette" checked class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500" />
+                </div>
+              </div>
+
+              <!-- B. 音频转换参数表单 (Audio Form) -->
+              <div id="formSectionAudio" class="hidden space-y-5">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">输出音频格式</label>
+                    <select id="a_format" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:outline-indigo-500">
+                      <option value="mp3">MP3 (全设备最高兼容)</option>
+                      <option value="wav">WAV (CD 级原始无损)</option>
+                      <option value="flac">FLAC (无损压缩标杆)</option>
+                      <option value="m4a">M4A (Apple AAC 格式)</option>
+                      <option value="aac">AAC (原生流格式)</option>
+                      <option value="ogg">OGG (Vorbis 开源格式)</option>
+                      <option value="opus">OPUS (新一代语音神器)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">音频比特率 (有损格式)</label>
+                    <select id="a_bitrate" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:outline-indigo-500">
+                      <option value="64k">64 kbps (播客/语音)</option>
+                      <option value="128k">128 kbps (标准)</option>
+                      <option value="192k">192 kbps (较高品质)</option>
+                      <option value="256k">256 kbps (极高音质)</option>
+                      <option value="320k" selected>320 kbps (最高品质 MP3)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">采样率 (Sample Rate)</label>
+                    <select id="a_samplerate" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:outline-indigo-500">
+                      <option value="original">保持原始采样率</option>
+                      <option value="44100">44,100 Hz (标准 CD)</option>
+                      <option value="48000">48,000 Hz (影视高清)</option>
+                      <option value="96000">96,000 Hz (Hi-Res 高解析)</option>
+                      <option value="22050">22,050 Hz (语音标清)</option>
+                      <option value="16000">16,000 Hz (低采样率)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">声频声道</label>
+                    <select id="a_channels" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:outline-indigo-500">
+                      <option value="2">立体声 (Stereo - 2 声道)</option>
+                      <option value="1">单声道 (Mono - 1 声道·省体积)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <div class="flex justify-between items-center mb-1">
+                      <label class="text-xs font-medium text-slate-500 dark:text-slate-400">音量增益调节</label>
+                      <span id="a_volume_label" class="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">100%</span>
+                    </div>
+                    <input type="range" id="a_volume" min="20" max="250" value="100" class="w-full h-1.5 bg-slate-200 dark:bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">截取范围 (秒)</label>
+                    <div class="flex items-center space-x-1.5">
+                      <input type="number" id="a_trim_start" placeholder="起点(s)" step="0.1" min="0" class="w-1/2 px-2 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600" />
+                      <span class="text-slate-400 text-xs">至</span>
+                      <input type="number" id="a_trim_end" placeholder="终点(s)" step="0.1" min="0" class="w-1/2 px-2 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600" />
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 响度归一化 (loudnorm) -->
+                <div class="p-3 bg-teal-50 dark:bg-teal-950/40 rounded-xl border border-teal-200 dark:border-teal-800 flex items-center justify-between text-xs">
+                  <div>
+                    <span class="font-semibold text-teal-700 dark:text-teal-300">🎙️ 启用 EBU R128 响度标准化 (Loudnorm)</span>
+                    <p class="text-teal-600/80 dark:text-teal-400 text-[11px]">自动平衡音量，消除忽大忽小爆音，适合播客、访谈与人声录音处理</p>
+                  </div>
+                  <input type="checkbox" id="a_loudnorm" class="w-4 h-4 rounded text-teal-600 focus:ring-teal-500" />
+                </div>
+              </div>
+
+              <!-- C. 图像转换参数表单 (Image Form) -->
+              <div id="formSectionImage" class="hidden space-y-5">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">目标图像格式</label>
+                    <select id="i_format" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:outline-indigo-500">
+                      <option value="webp">WebP (推荐·兼具高保真与极小体积)</option>
+                      <option value="jpg">JPEG / JPG (摄影标准)</option>
+                      <option value="png">PNG (透明与设计图无损)</option>
+                      <option value="gif">GIF (动图/静态图)</option>
+                      <option value="ico">ICO (网站 Favicon 图标)</option>
+                      <option value="bmp">BMP (原始位图)</option>
+                      <option value="tiff">TIFF (高保真印刷)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <div class="flex justify-between items-center mb-1">
+                      <label class="text-xs font-medium text-slate-500 dark:text-slate-400">输出质量 (Quality)</label>
+                      <span id="i_quality_label" class="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">85%</span>
+                    </div>
+                    <input type="range" id="i_quality" min="10" max="100" value="85" class="w-full h-1.5 bg-slate-200 dark:bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">尺寸缩放 (维持宽高比)</label>
+                    <select id="i_scale" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:outline-indigo-500">
+                      <option value="original">保持原始尺寸</option>
+                      <option value="1920:-1">宽度限 1920 (FHD)</option>
+                      <option value="1280:-1">宽度限 1280 (HD)</option>
+                      <option value="800:-1">宽度限 800 (网页插图)</option>
+                      <option value="500:-1">宽度限 500 (缩略图)</option>
+                      <option value="32:32">32 × 32 (标准 Favicon)</option>
+                      <option value="16:16">16 × 16 (迷你 Favicon)</option>
+                      <option value="custom">自定义宽高...</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- 自定义尺寸输入框 -->
+                <div id="i_custom_scale_box" class="hidden grid grid-cols-2 gap-4">
+                  <div>
+                    <span class="text-xs text-slate-400 block mb-1">宽度 (px):</span>
+                    <input type="number" id="i_custom_w" placeholder="如 800" class="w-full px-3 py-1.5 text-xs rounded-lg bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600" />
+                  </div>
+                  <div>
+                    <span class="text-xs text-slate-400 block mb-1">高度 (px):</span>
+                    <input type="number" id="i_custom_h" placeholder="如 600" class="w-full px-3 py-1.5 text-xs rounded-lg bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600" />
+                  </div>
+                </div>
+
+                <!-- 图像特效与黑白 -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">旋转 / 翻转</label>
+                    <select id="i_rotate" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:outline-indigo-500">
+                      <option value="none">无旋转</option>
+                      <option value="90">顺时针 90°</option>
+                      <option value="180">旋转 180°</option>
+                      <option value="270">逆时针 90°</option>
+                      <option value="hflip">水平镜像翻转</option>
+                      <option value="vflip">垂直翻转</option>
+                    </select>
+                  </div>
+                  <div class="flex items-center space-x-3 pt-4 sm:pt-6">
+                    <label class="flex items-center space-x-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+                      <input type="checkbox" id="i_grayscale" class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500" />
+                      <span>转换为黑白灰度图 (Grayscale)</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Tab 2 内容: 实时 FFmpeg CLI 命令行预览 & 高阶参数定制 -->
+            <div id="tabContentCli" class="hidden space-y-4">
+              <div>
+                <div class="flex justify-between items-center mb-1.5">
+                  <label class="text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center space-x-1.5">
+                    <span>⚡ 实时生成的 FFmpeg 指令预览</span>
+                  </label>
+                  <button id="btnCopyCli" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+                    <span>复制指令</span>
+                  </button>
+                </div>
+                <div id="cliPreviewText" class="w-full p-3 rounded-xl bg-slate-900 text-emerald-400 code-font text-xs overflow-x-auto select-all shadow-inner">
+                  ffmpeg -i input.mp4 -c:v libx264 -crf 23 -preset medium -c:a aac -b:a 128k output.mp4
+                </div>
+              </div>
+
+              <!-- 参数详解标签云 (为小白科普专业参数) -->
+              <div class="space-y-1.5">
+                <span class="text-xs font-medium text-slate-500 dark:text-slate-400">参数语义拆解解读:</span>
+                <div id="cliExplanationBox" class="flex flex-wrap gap-1.5 text-[11px] font-mono">
+                  <!-- 由 JS 填充 -->
+                </div>
+              </div>
+
+              <!-- 自定义高阶命令行参数注入 -->
+              <div class="pt-3 border-t border-slate-100 dark:border-slate-700/60">
+                <div class="flex items-center justify-between mb-1.5">
+                  <label class="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    🛠️ 注入高阶自定义 CLI 参数 (高级专家模式)
+                  </label>
+                  <span class="text-[10px] text-slate-400">将追加至输出文件名之前</span>
+                </div>
+                <input type="text" id="customCliArgs" placeholder="例如: -threads 2 -aspect 16:9 -movflags +faststart" class="w-full px-3 py-2 text-xs code-font rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:outline-indigo-500" />
+                <p class="text-[11px] text-slate-400 mt-1">支持输入任何 FFmpeg 官方滤镜参数 (-vf, -af, -q:v, -threads, -metadata 等)，系统将自动解析组合。</p>
+              </div>
+            </div>
+
+            <!-- Tab 3 内容: 终端实时日志 (FFmpeg Terminal) -->
+            <div id="tabContentLogs" class="hidden space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center space-x-1.5">
+                  <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>FFmpeg.wasm 核心控制台标准输出</span>
+                </span>
+                <div class="flex items-center space-x-2 text-xs">
+                  <button id="btnClearLogs" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition">清空日志</button>
+                  <button id="btnCopyLogs" class="text-indigo-600 dark:text-indigo-400 hover:underline transition">复制全部</button>
+                  <button id="btnDownloadLogs" class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition">导出为 .log</button>
+                </div>
+              </div>
+              <div id="terminalPanel" class="w-full h-80 p-3.5 rounded-xl bg-slate-950 text-slate-300 code-font text-xs overflow-y-auto shadow-inner leading-relaxed select-text">
+                <span class="text-slate-500">// 准备就绪，FFmpeg WebAssembly 单线程核心待命中...</span><br />
+                <span class="text-slate-500">// 支持全格式视频、音频及图像的纯本地转码与滤镜渲染。</span><br />
+              </div>
+            </div>
+
+          </div>
+
+          <!-- 转码进度指示器 (运行中显示) -->
+          <div id="progressCard" class="hidden bg-white dark:bg-slate-800 rounded-2xl p-5 border border-indigo-200 dark:border-indigo-900 shadow-md">
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex items-center space-x-2.5">
+                <div class="w-3 h-3 rounded-full border-2 border-indigo-600 border-t-transparent animate-spin"></div>
+                <span id="progressTitle" class="text-xs font-bold text-slate-800 dark:text-slate-100">正在处理中...</span>
+              </div>
+              <span id="progressPercent" class="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">0%</span>
+            </div>
+            <!-- 进度条 -->
+            <div class="w-full bg-slate-100 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+              <div id="progressBar" class="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 h-2 rounded-full transition-all duration-200" style="width: 0%;"></div>
+            </div>
+            <div class="flex justify-between items-center text-[11px] text-slate-400 mt-2 font-mono">
+              <span id="progressTime">-</span>
+              <span id="progressSpeed">-</span>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </main>
+
+    <!-- 弹窗: 保存自定义预设 Modal -->
+    <div id="savePresetModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+      <div class="bg-white dark:bg-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-700 space-y-4">
+        <div class="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-3">
+          <h3 class="font-bold text-base text-slate-800 dark:text-slate-100">保存当前配置为自定义预设</h3>
+          <button id="btnClosePresetModal" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+
+        <div class="space-y-3 text-xs">
+          <div>
+            <label class="block font-medium text-slate-600 dark:text-slate-300 mb-1">预设名称 *</label>
+            <input type="text" id="newPresetName" placeholder="例如: 我的小红书 1080x1920 竖屏预设" class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:outline-indigo-500" />
+          </div>
+          <div>
+            <label class="block font-medium text-slate-600 dark:text-slate-300 mb-1">预设类别</label>
+            <select id="newPresetCategory" class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:outline-indigo-500">
+              <option value="video">🎬 视频转换</option>
+              <option value="audio">🎵 音频转换</option>
+              <option value="image">🖼️ 图像转换</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-medium text-slate-600 dark:text-slate-300 mb-1">预设描述 / 备注</label>
+            <textarea id="newPresetDesc" rows="2" placeholder="简要说明适用场景或特殊参数" class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:outline-indigo-500"></textarea>
+          </div>
+        </div>
+
+        <div class="flex justify-end space-x-2 pt-2">
+          <button id="btnCancelPresetModal" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition">取消</button>
+          <button id="btnConfirmSavePreset" class="px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition">确认保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 浮动 Toast 通知 -->
+    <div id="toast" class="fixed bottom-6 right-6 z-50 transform translate-y-16 opacity-0 pointer-events-none transition-all duration-300 flex items-center space-x-2.5 px-4 py-3 rounded-2xl bg-slate-900 text-white shadow-2xl border border-slate-800 text-xs">
+      <span id="toastIcon">✨</span>
+      <span id="toastMsg" class="font-medium">操作成功</span>
+    </div>
+
+    <!-- 页脚版权 -->
+    <footer class="mt-auto border-t border-slate-200 dark:border-slate-800/80 py-6 text-center text-xs text-slate-400">
+      <p>&copy; 2026 AI Gen Tools Collection · FFmpeg WebAssembly (v0.12.7) · 纯本地无损音视频与图像转码</p>
+    </footer>
+
+    <!-- 业务逻辑 ES 模块 -->
+    <script type="module">
+      import { FFmpeg } from './assets/@ffmpeg/ffmpeg@0.12.7/dist/esm/index.js';
+      import { fetchFile, toBlobURL } from './assets/@ffmpeg/util@0.12.1/dist/esm/index.js';
+
+      // ==========================================
+      // 1. 内置丰富预设方案列表 (小白一键直达)
+      // ==========================================
+      const BUILTIN_PRESETS = [
+        // --- 🎬 视频预设 ---
+        {
+          id: 'video_wechat',
+          category: 'video',
+          name: '视频极限压缩 (微信/邮件秒传)',
+          desc: '720p 分辨率，CRF 28 高压缩率，适合微信、钉钉或邮件快速发送，体积减小 70%-90%',
+          icon: '💬',
+          badge: '极小体积',
+          format: 'mp4',
+          options: {
+            vcodec: 'libx264',
+            preset: 'fast',
+            crf: '28',
+            scale: '-2:720',
+            fps: 'original',
+            speed: '1.0',
+            rotate: 'none',
+            audioAction: 'keep',
+            abitrate: '96k',
+            trimStart: '',
+            trimEnd: '',
+            customArgs: ''
+          }
+        },
+        {
+          id: 'video_mp4_hd',
+          category: 'video',
+          name: '通用高清 MP4 (全设备兼容)',
+          desc: '标准 H.264 + AAC 编码，保留 1080p 高清画质与 192k 音质，兼容所有手机、电脑与智能电视',
+          icon: '📱',
+          badge: '通用高清',
+          format: 'mp4',
+          options: {
+            vcodec: 'libx264',
+            preset: 'medium',
+            crf: '22',
+            scale: '-2:1080',
+            fps: 'original',
+            speed: '1.0',
+            rotate: 'none',
+            audioAction: 'keep',
+            abitrate: '192k',
+            trimStart: '',
+            trimEnd: '',
+            customArgs: ''
+          }
+        },
+        {
+          id: 'video_extract_mp3',
+          category: 'video',
+          name: '从视频中提取超清 MP3 音频',
+          desc: '剥离视频画面，仅保留音频流并导出为 320kbps 超高音质 MP3，提取 MV 或背景配乐',
+          icon: '🎵',
+          badge: '音频提取',
+          format: 'mp3',
+          targetCategory: 'audio',
+          options: {
+            aformat: 'mp3',
+            abitrate: '320k',
+            asamplerate: '44100',
+            achannels: '2',
+            avolume: '100',
+            aloudnorm: false,
+            customArgs: '-vn'
+          }
+        },
+        {
+          id: 'video_to_gif',
+          category: 'video',
+          name: '视频转超清 GIF 动图',
+          desc: '内置双通道调色板生成算法 (Palettegen)，480p 宽度，15fps 丝滑流畅，杜绝噪点与花屏',
+          icon: '🎞️',
+          badge: '高质量动图',
+          format: 'gif',
+          options: {
+            vcodec: 'libx264',
+            preset: 'medium',
+            crf: '23',
+            scale: '480:-2',
+            fps: '15',
+            speed: '1.0',
+            rotate: 'none',
+            audioAction: 'mute',
+            usePalette: true,
+            trimStart: '',
+            trimEnd: '',
+            customArgs: ''
+          }
+        },
+        {
+          id: 'video_webm',
+          category: 'video',
+          name: 'WebM 网页现代格式 (VP9 编码)',
+          desc: '采用 Google VP9 高效视频编码与 128k 音频，相同画质下比 MP4 节省 30% 以上带宽',
+          icon: '🌐',
+          badge: '网页首选',
+          format: 'webm',
+          options: {
+            vcodec: 'libvpx-vp9',
+            preset: 'medium',
+            crf: '30',
+            scale: 'original',
+            fps: 'original',
+            speed: '1.0',
+            rotate: 'none',
+            audioAction: 'keep',
+            abitrate: '128k',
+            trimStart: '',
+            trimEnd: '',
+            customArgs: ''
+          }
+        },
+        {
+          id: 'video_remux_copy',
+          category: 'video',
+          name: '极速无损封装换壳 (Remux / Copy)',
+          desc: '不重新编码流，直接将 MKV/MOV/AVI 等无损封装为 MP4，几毫秒极速完成，画质 0 损失',
+          icon: '⚡',
+          badge: '免重编码',
+          format: 'mp4',
+          options: {
+            vcodec: 'copy',
+            preset: 'ultrafast',
+            crf: '23',
+            scale: 'original',
+            fps: 'original',
+            speed: '1.0',
+            rotate: 'none',
+            audioAction: 'copy',
+            abitrate: '128k',
+            trimStart: '',
+            trimEnd: '',
+            customArgs: ''
+          }
+        },
+        {
+          id: 'video_mute',
+          category: 'video',
+          name: '视频一键消音 / 静音',
+          desc: '彻底剔除所有音频流，输出纯画面的无声视频',
+          icon: '🔇',
+          badge: '去除杂音',
+          format: 'mp4',
+          options: {
+            vcodec: 'libx264',
+            preset: 'fast',
+            crf: '23',
+            scale: 'original',
+            fps: 'original',
+            speed: '1.0',
+            rotate: 'none',
+            audioAction: 'mute',
+            trimStart: '',
+            trimEnd: '',
+            customArgs: ''
+          }
+        },
+        {
+          id: 'video_speed_2x',
+          category: 'video',
+          name: '视频 2 倍速快进 (声画同步)',
+          desc: '将画面与音频同步加速至 2.0x 播放，适合制作教程倍速回顾或延时效果',
+          icon: '⏩',
+          badge: '2X 加速',
+          format: 'mp4',
+          options: {
+            vcodec: 'libx264',
+            preset: 'veryfast',
+            crf: '24',
+            scale: 'original',
+            fps: 'original',
+            speed: '2.0',
+            rotate: 'none',
+            audioAction: 'keep',
+            abitrate: '128k',
+            trimStart: '',
+            trimEnd: '',
+            customArgs: ''
+          }
+        },
+        // --- 🎵 音频预设 ---
+        {
+          id: 'audio_mp3_hq',
+          category: 'audio',
+          name: '超清高保真 MP3 (320kbps)',
+          desc: '最高音质 MP3 规格，44.1kHz 采样率立体声，完美适配所有播放器与车载设备',
+          icon: '🎧',
+          badge: '320kbps',
+          format: 'mp3',
+          options: {
+            aformat: 'mp3',
+            abitrate: '320k',
+            asamplerate: '44100',
+            achannels: '2',
+            avolume: '100',
+            aloudnorm: false,
+            trimStart: '',
+            trimEnd: '',
+            customArgs: ''
+          }
+        },
+        {
+          id: 'audio_wav_pcm',
+          category: 'audio',
+          name: 'CD 母带级 WAV (无损还原)',
+          desc: '标准 PCM 16-bit 44.1kHz 无损波形音频，录音棚制作、音效采样与音频工程首选',
+          icon: '💽',
+          badge: 'PCM 无损',
+          format: 'wav',
+          options: {
+            aformat: 'wav',
+            abitrate: '320k',
+            asamplerate: '44100',
+            achannels: '2',
+            avolume: '100',
+            aloudnorm: false,
+            trimStart: '',
+            trimEnd: '',
+            customArgs: ''
+          }
+        },
+        {
+          id: 'audio_flac_lossless',
+          category: 'audio',
+          name: 'FLAC 无损压缩 (音质不变体积减半)',
+          desc: '完全无损的音频压缩格式，保留原音频 100% 声学细节，体积比 WAV 小 40-50%',
+          icon: '💎',
+          badge: '无损压缩',
+          format: 'flac',
+          options: {
+            aformat: 'flac',
+            abitrate: '320k',
+            asamplerate: 'original',
+            achannels: '2',
+            avolume: '100',
+            aloudnorm: false,
+            trimStart: '',
+            trimEnd: '',
+            customArgs: ''
+          }
+        },
+        {
+          id: 'audio_m4a_apple',
+          category: 'audio',
+          name: 'Apple / iPhone 专用 M4A (256k AAC)',
+          desc: '苹果生态系统最优音频格式，高能效 AAC-LC 算法，音质在同体积下显著优于 MP3',
+          icon: '🍎',
+          badge: '苹果推荐',
+          format: 'm4a',
+          options: {
+            aformat: 'm4a',
+            abitrate: '256k',
+            asamplerate: '44100',
+            achannels: '2',
+            avolume: '100',
+            aloudnorm: false,
+            trimStart: '',
+            trimEnd: '',
+            customArgs: ''
+          }
+        },
+        {
+          id: 'audio_voice_podcast',
+          category: 'audio',
+          name: '播客 / 人声增强 (响度标准化)',
+          desc: '转为 64kbps 单声道并启用 EBU R128 响度标准化 (loudnorm)，人声清晰平稳，体积超小',
+          icon: '🎙️',
+          badge: '人声优化',
+          format: 'mp3',
+          options: {
+            aformat: 'mp3',
+            abitrate: '64k',
+            asamplerate: '44100',
+            achannels: '1',
+            avolume: '100',
+            aloudnorm: true,
+            trimStart: '',
+            trimEnd: '',
+            customArgs: ''
+          }
+        },
+        // --- 🖼️ 图像预设 ---
+        {
+          id: 'image_webp_hq',
+          category: 'image',
+          name: 'WebP 现代高保真压缩 (85% 质量)',
+          desc: '新一代网页图像格式，相比 JPG/PNG 体积减少 60-80%，肉眼几乎无法分辨画质差异',
+          icon: '⚡',
+          badge: '网页神器',
+          format: 'webp',
+          options: {
+            iformat: 'webp',
+            iquality: '85',
+            iscale: 'original',
+            irotate: 'none',
+            igrayscale: false,
+            customArgs: ''
+          }
+        },
+        {
+          id: 'image_jpg_high',
+          category: 'image',
+          name: '标准摄影 JPG (高画质 90%)',
+          desc: '通用 JPEG 格式，高质量系数，适合摄影作品归档与日常相册保存',
+          icon: '📷',
+          badge: '通用相片',
+          format: 'jpg',
+          options: {
+            iformat: 'jpg',
+            iquality: '90',
+            iscale: 'original',
+            irotate: 'none',
+            igrayscale: false,
+            customArgs: ''
+          }
+        },
+        {
+          id: 'image_png_lossless',
+          category: 'image',
+          name: 'PNG 极致无损压缩',
+          desc: '保留透明通道，启用最高等级 9 压缩算法，消除冗余数据，适合图标、截图与设计稿',
+          icon: '🎨',
+          badge: '透明无损',
+          format: 'png',
+          options: {
+            iformat: 'png',
+            iquality: '100',
+            iscale: 'original',
+            irotate: 'none',
+            igrayscale: false,
+            customArgs: ''
+          }
+        },
+        {
+          id: 'image_ico_favicon',
+          category: 'image',
+          name: '生成 Favicon 网站图标 (32x32 ICO)',
+          desc: '一键将图片转换为 32x32 像素的标准 .ico 网页标头图标',
+          icon: '🌐',
+          badge: '网站图标',
+          format: 'ico',
+          options: {
+            iformat: 'ico',
+            iquality: '100',
+            iscale: '32:32',
+            irotate: 'none',
+            igrayscale: false,
+            customArgs: ''
+          }
+        },
+        {
+          id: 'image_grayscale_art',
+          category: 'image',
+          name: '一键复古黑白灰度图',
+          desc: '将彩色图像转换为纯黑白单通道灰度图，突出明暗层次与纹理细节',
+          icon: '🖤',
+          badge: '艺术黑白',
+          format: 'jpg',
+          options: {
+            iformat: 'jpg',
+            iquality: '90',
+            iscale: 'original',
+            irotate: 'none',
+            igrayscale: true,
+            customArgs: ''
+          }
+        }
+      ];
+
+      // ==========================================
+      // 2. 全局状态与实例初始化
+      // ==========================================
+      let ffmpeg = new FFmpeg();
+      window.ffmpeg = ffmpeg;
+      let isFFmpegLoaded = false;
+      let isProcessing = false;
+      let rawLogLines = [];
+
+      // 核心引擎模式控制: 'mt' (多线程 Core-MT) | 'st' (单线程 Core-ST)
+      // 写死默认优先加载多线程核心
+      let currentEngineMode = 'mt';
+
+      // 更新核心引擎徽章指示
+      function updateEngineBadge(mode, status = 'ready') {
+        const dot = document.getElementById('engineStatusDot');
+        const text = document.getElementById('engineStatusText');
+        const badge = document.getElementById('engineStatusBadge');
+        if (!dot || !text || !badge) return;
+
+        const cores = navigator.hardwareConcurrency || 4;
+        if (mode === 'mt') {
+          dot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
+          text.innerText = status === 'loaded' ? `⚡ 多线程运行中 (${cores}核 Core-MT)` : `⚡ 强制多线程 (${cores}核 Core-MT)`;
+          badge.className = 'flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-mono border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 cursor-pointer select-none transition hover:opacity-90';
+          badge.title = '当前写死为多线程模式 (@ffmpeg/core-mt@0.12.6)。点击可切换为单线程模式';
+        } else {
+          dot.className = 'w-2 h-2 rounded-full bg-blue-500';
+          text.innerText = status === 'loaded' ? '💡 单线程运行中 (Core-ST)' : '💡 单线程模式 (Core-ST)';
+          badge.className = 'flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-mono border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 cursor-pointer select-none transition hover:opacity-90';
+          badge.title = '当前为单线程模式 (@ffmpeg/core@0.12.4)。点击可切换回多线程模式';
+        }
+      }
+
+      // 当前操作媒体模式 ('video' | 'audio' | 'image')
+      let currentCategory = 'video';
+
+      // 待处理队列中的文件项列表
+      // 每个项: { id, file, name, size, typeCategory, status: 'pending'|'processing'|'done'|'error', outputBlob, outputUrl, outputSize, outputName, errorMsg }
+      let fileQueue = [];
+      let activeQueueIndex = -1;
+
+      // 自定义预设存储键
+      const STORAGE_KEY_PRESETS = 'ffmpeg_media_converter_custom_presets_v1';
+
+      // 获取用户自定义预设
+      function getCustomPresets() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY_PRESETS);
+          return raw ? JSON.parse(raw) : [];
+        } catch (e) {
+          console.error('Failed to load custom presets from storage', e);
+          return [];
+        }
+      }
+
+      function saveCustomPresets(presets) {
+        localStorage.setItem(STORAGE_KEY_PRESETS, JSON.stringify(presets));
+      }
+
+      // 获取所有有效预设 (内置 + 自定义)
+      function getAllPresets() {
+        return [...BUILTIN_PRESETS, ...getCustomPresets()];
+      }
+
+      // ==========================================
+      // 3. DOM 元素快速引用
+      // ==========================================
+      const ui = {
+        themeToggle: document.getElementById('themeToggle'),
+        mediaInput: document.getElementById('mediaInput'),
+        dropZone: document.getElementById('dropZone'),
+        presetsGrid: document.getElementById('presetsGrid'),
+        activePresetBadge: document.getElementById('activePresetBadge'),
+        btnOpenSavePresetModal: document.getElementById('btnOpenSavePresetModal'),
+        importPresetInput: document.getElementById('importPresetInput'),
+        btnExportPresets: document.getElementById('btnExportPresets'),
+        btnResetPresets: document.getElementById('btnResetPresets'),
+
+        // 队列
+        fileQueueList: document.getElementById('fileQueueList'),
+        emptyQueueTip: document.getElementById('emptyQueueTip'),
+        queueCountBadge: document.getElementById('queueCountBadge'),
+        btnClearQueue: document.getElementById('btnClearQueue'),
+        btnStartBatch: document.getElementById('btnStartBatch'),
+        btnDownloadAllCompleted: document.getElementById('btnDownloadAllCompleted'),
+
+        // 对比预览
+        previewCard: document.getElementById('previewCard'),
+        previewMediaBadge: document.getElementById('previewMediaBadge'),
+        origSizeLabel: document.getElementById('origSizeLabel'),
+        origPreviewBox: document.getElementById('origPreviewBox'),
+        outputSizeLabel: document.getElementById('outputSizeLabel'),
+        outputDiffBadge: document.getElementById('outputDiffBadge'),
+        outputPreviewBox: document.getElementById('outputPreviewBox'),
+        outputActionBox: document.getElementById('outputActionBox'),
+        btnDownloadCurrent: document.getElementById('btnDownloadCurrent'),
+
+        // 配置 Tabs
+        tabBtnOptions: document.getElementById('tabBtnOptions'),
+        tabBtnCli: document.getElementById('tabBtnCli'),
+        tabBtnLogs: document.getElementById('tabBtnLogs'),
+        tabContentOptions: document.getElementById('tabContentOptions'),
+        detectedCoresBadge: document.getElementById('detectedCoresBadge'),
+        mt_thread_count: document.getElementById('mt_thread_count'),
+        tabContentCli: document.getElementById('tabContentCli'),
+        tabContentLogs: document.getElementById('tabContentLogs'),
+
+        // 媒体类别选择 Tabs
+        mediaTypeTabVideo: document.getElementById('mediaTypeTabVideo'),
+        mediaTypeTabAudio: document.getElementById('mediaTypeTabAudio'),
+        mediaTypeTabImage: document.getElementById('mediaTypeTabImage'),
+        formSectionVideo: document.getElementById('formSectionVideo'),
+        formSectionAudio: document.getElementById('formSectionAudio'),
+        formSectionImage: document.getElementById('formSectionImage'),
+
+        // 视频表单输入项
+        v_format: document.getElementById('v_format'),
+        v_codec: document.getElementById('v_codec'),
+        v_preset: document.getElementById('v_preset'),
+        v_crf: document.getElementById('v_crf'),
+        v_crf_val: document.getElementById('v_crf_val'),
+        v_scale: document.getElementById('v_scale'),
+        v_custom_scale_box: document.getElementById('v_custom_scale_box'),
+        v_custom_w: document.getElementById('v_custom_w'),
+        v_custom_h: document.getElementById('v_custom_h'),
+        v_audio_action: document.getElementById('v_audio_action'),
+        v_abitrate: document.getElementById('v_abitrate'),
+        v_fps: document.getElementById('v_fps'),
+        v_speed: document.getElementById('v_speed'),
+        v_rotate: document.getElementById('v_rotate'),
+        v_trim_start: document.getElementById('v_trim_start'),
+        v_trim_end: document.getElementById('v_trim_end'),
+        v_gif_opt_box: document.getElementById('v_gif_opt_box'),
+        v_gif_palette: document.getElementById('v_gif_palette'),
+
+        // 音频表单输入项
+        a_format: document.getElementById('a_format'),
+        a_bitrate: document.getElementById('a_bitrate'),
+        a_samplerate: document.getElementById('a_samplerate'),
+        a_channels: document.getElementById('a_channels'),
+        a_volume: document.getElementById('a_volume'),
+        a_volume_label: document.getElementById('a_volume_label'),
+        a_trim_start: document.getElementById('a_trim_start'),
+        a_trim_end: document.getElementById('a_trim_end'),
+        a_loudnorm: document.getElementById('a_loudnorm'),
+
+        // 图像表单输入项
+        i_format: document.getElementById('i_format'),
+        i_quality: document.getElementById('i_quality'),
+        i_quality_label: document.getElementById('i_quality_label'),
+        i_scale: document.getElementById('i_scale'),
+        i_custom_scale_box: document.getElementById('i_custom_scale_box'),
+        i_custom_w: document.getElementById('i_custom_w'),
+        i_custom_h: document.getElementById('i_custom_h'),
+        i_rotate: document.getElementById('i_rotate'),
+        i_grayscale: document.getElementById('i_grayscale'),
+
+        // CLI 与高阶参数
+        cliPreviewText: document.getElementById('cliPreviewText'),
+        cliExplanationBox: document.getElementById('cliExplanationBox'),
+        customCliArgs: document.getElementById('customCliArgs'),
+        btnCopyCli: document.getElementById('btnCopyCli'),
+
+        // 日志控制台
+        terminalPanel: document.getElementById('terminalPanel'),
+        btnClearLogs: document.getElementById('btnClearLogs'),
+        btnCopyLogs: document.getElementById('btnCopyLogs'),
+        btnDownloadLogs: document.getElementById('btnDownloadLogs'),
+
+        // 进度卡片
+        progressCard: document.getElementById('progressCard'),
+        progressTitle: document.getElementById('progressTitle'),
+        progressPercent: document.getElementById('progressPercent'),
+        progressBar: document.getElementById('progressBar'),
+        progressTime: document.getElementById('progressTime'),
+        progressSpeed: document.getElementById('progressSpeed'),
+
+        // 预设保存模态框
+        savePresetModal: document.getElementById('savePresetModal'),
+        btnClosePresetModal: document.getElementById('btnClosePresetModal'),
+        btnCancelPresetModal: document.getElementById('btnCancelPresetModal'),
+        btnConfirmSavePreset: document.getElementById('btnConfirmSavePreset'),
+        newPresetName: document.getElementById('newPresetName'),
+        newPresetCategory: document.getElementById('newPresetCategory'),
+        newPresetDesc: document.getElementById('newPresetDesc'),
+
+        // Toast
+        toast: document.getElementById('toast'),
+        toastIcon: document.getElementById('toastIcon'),
+        toastMsg: document.getElementById('toastMsg'),
+      };
+
+      // ==========================================
+      // 4. 辅助工具函数
+      // ==========================================
+      function formatBytes(bytes, decimals = 2) {
+        if (!bytes || bytes === 0) return '0 B';
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+      }
+
+      function showToast(msg, icon = '✨') {
+        ui.toastIcon.innerText = icon;
+        ui.toastMsg.innerText = msg;
+        ui.toast.classList.remove('translate-y-16', 'opacity-0', 'pointer-events-none');
+        setTimeout(() => {
+          ui.toast.classList.add('translate-y-16', 'opacity-0', 'pointer-events-none');
+        }, 2600);
+      }
+
+      function copyText(text, successMsg = '已成功复制到剪贴板！') {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(() => showToast(successMsg, '📋'));
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          showToast(successMsg, '📋');
+        }
+      }
+
+      function appendTerminalLog(msg, type = 'info') {
+        const timeStr = new Date().toLocaleTimeString();
+        let colorClass = 'text-slate-300';
+        if (msg.includes('error') || msg.includes('Error') || type === 'error') {
+          colorClass = 'text-red-400 font-semibold';
+        } else if (msg.includes('time=') || msg.includes('fps=')) {
+          colorClass = 'text-emerald-400';
+        } else if (msg.includes('warning') || msg.includes('Warning')) {
+          colorClass = 'text-amber-400';
+        }
+
+        const div = document.createElement('div');
+        div.className = colorClass;
+        div.innerHTML = `<span class="text-slate-600">[${timeStr}]</span> ${escapeHtml(msg)}`;
+        ui.terminalPanel.appendChild(div);
+        ui.terminalPanel.scrollTop = ui.terminalPanel.scrollHeight;
+      }
+
+      function escapeHtml(str) {
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+
+      // 文件媒体类型判别
+      function detectFileType(file) {
+        const ext = file.name.split('.').pop().toLowerCase();
+        const mime = file.type || '';
+        if (mime.startsWith('video/') || ['mp4', 'mkv', 'webm', 'mov', 'avi', 'flv', 'wmv', 'ts', 'm4v', '3gp'].includes(ext)) {
+          return 'video';
+        }
+        if (mime.startsWith('audio/') || ['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'opus', 'wma', 'aiff'].includes(ext)) {
+          return 'audio';
+        }
+        if (mime.startsWith('image/') || ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'tiff', 'tif', 'ico', 'svg'].includes(ext)) {
+          return 'image';
+        }
+        return 'video';
+      }
+
+      // ==========================================
+      // 5. 主题切换与 Tabs 管理
+      // ==========================================
+      ui.themeToggle.addEventListener('click', () => {
+        const isDark = document.documentElement.classList.contains('dark');
+        if (isDark) {
+          document.documentElement.classList.remove('dark');
+          localStorage.theme = 'light';
+        } else {
+          document.documentElement.classList.add('dark');
+          localStorage.theme = 'dark';
+        }
+      });
+
+      function switchConfigTab(tabName) {
+        // 重置按钮样式
+        const inactiveClass = 'px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700 transition';
+        const activeClass = 'px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-semibold transition';
+
+        ui.tabBtnOptions.className = tabName === 'options' ? activeClass : inactiveClass;
+        ui.tabBtnCli.className = tabName === 'cli' ? activeClass : inactiveClass;
+        ui.tabBtnLogs.className = tabName === 'logs' ? activeClass : inactiveClass;
+
+        ui.tabContentOptions.classList.toggle('hidden', tabName !== 'options');
+        ui.tabContentCli.classList.toggle('hidden', tabName !== 'cli');
+        ui.tabContentLogs.classList.toggle('hidden', tabName !== 'logs');
+      }
+
+      ui.tabBtnOptions.addEventListener('click', () => switchConfigTab('options'));
+      ui.tabBtnCli.addEventListener('click', () => {
+        updateCliCommandPreview();
+        switchConfigTab('cli');
+      });
+      ui.tabBtnLogs.addEventListener('click', () => switchConfigTab('logs'));
+
+      // 切换当前配置表单 (video / audio / image)
+      function setMediaCategory(cat, syncPresetBadge = false) {
+        currentCategory = cat;
+        const activeClass = 'px-2.5 py-1 rounded-md bg-white dark:bg-slate-800 shadow-xs font-semibold text-slate-800 dark:text-slate-100 transition';
+        const inactiveClass = 'px-2.5 py-1 rounded-md text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition';
+
+        ui.mediaTypeTabVideo.className = cat === 'video' ? activeClass : inactiveClass;
+        ui.mediaTypeTabAudio.className = cat === 'audio' ? activeClass : inactiveClass;
+        ui.mediaTypeTabImage.className = cat === 'image' ? activeClass : inactiveClass;
+
+        ui.formSectionVideo.classList.toggle('hidden', cat !== 'video');
+        ui.formSectionAudio.classList.toggle('hidden', cat !== 'audio');
+        ui.formSectionImage.classList.toggle('hidden', cat !== 'image');
+
+        updateCliCommandPreview();
+      }
+
+      ui.mediaTypeTabVideo.addEventListener('click', () => setMediaCategory('video'));
+      ui.mediaTypeTabAudio.addEventListener('click', () => setMediaCategory('audio'));
+      ui.mediaTypeTabImage.addEventListener('click', () => setMediaCategory('image'));
+
+      // ==========================================
+      // 6. 预设系统渲染与应用 (小白一键化)
+      // ==========================================
+      let currentPresetFilter = 'all';
+
+      function renderPresets() {
+        const presets = getAllPresets();
+        ui.presetsGrid.innerHTML = '';
+
+        const filtered = presets.filter(p => {
+          if (currentPresetFilter === 'all') return true;
+          if (currentPresetFilter === 'custom') return p.id.startsWith('custom_');
+          return p.category === currentPresetFilter;
+        });
+
+        if (filtered.length === 0) {
+          ui.presetsGrid.innerHTML = `
+            <div class="col-span-full py-8 text-center text-xs text-slate-400">
+              该分类下暂无预设，点击右上角 "➕ 保存当前为新预设" 创建专属预设
+            </div>
+          `;
+          return;
+        }
+
+        filtered.forEach(preset => {
+          const card = document.createElement('div');
+          const isCustom = preset.id.startsWith('custom_');
+          card.className = `p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-700/60 bg-slate-50/60 dark:bg-slate-700/30 hover:border-indigo-500 dark:hover:border-indigo-400 hover:bg-white dark:hover:bg-slate-800 transition cursor-pointer group flex flex-col justify-between relative`;
+
+          card.innerHTML = `
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <div class="flex items-center space-x-2">
+                  <span class="text-xl">${preset.icon || '⚙️'}</span>
+                  <h4 class="font-bold text-xs text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition">${preset.name}</h4>
+                </div>
+                <span class="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300">${preset.badge || preset.format.toUpperCase()}</span>
+              </div>
+              <p class="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed mb-3">${preset.desc}</p>
+            </div>
+            <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/40 text-[10px]">
+              <span class="text-slate-400 font-mono">格式: .${preset.format}</span>
+              <div class="flex items-center space-x-1.5">
+                ${isCustom ? `<button data-del="${preset.id}" class="text-red-400 hover:text-red-600 p-0.5 transition" title="删除该自定义预设">🗑️</button>` : ''}
+                <span class="text-indigo-600 dark:text-indigo-400 font-semibold group-hover:underline">应用预设 →</span>
+              </div>
+            </div>
+          `;
+
+          // 点击删除自定义预设
+          const delBtn = card.querySelector(`[data-del="${preset.id}"]`);
+          if (delBtn) {
+            delBtn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              if (confirm(`确定删除自定义预设 "${preset.name}" 吗？`)) {
+                const customs = getCustomPresets().filter(p => p.id !== preset.id);
+                saveCustomPresets(customs);
+                renderPresets();
+                showToast(`已删除预设 "${preset.name}"`, '🗑️');
+              }
+            });
+          }
+
+          // 点击应用预设
+          card.addEventListener('click', () => applyPreset(preset));
+
+          ui.presetsGrid.appendChild(card);
+        });
+      }
+
+      // 绑定分类筛选按钮
+      document.querySelectorAll('.preset-cat-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.preset-cat-btn').forEach(b => {
+            b.className = 'preset-cat-btn px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/60 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition';
+          });
+          btn.className = 'preset-cat-btn px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-semibold shadow-sm transition';
+          currentPresetFilter = btn.dataset.cat;
+          renderPresets();
+        });
+      });
+
+      // 应用预设至当前 UI 表单
+      function applyPreset(preset) {
+        const cat = preset.targetCategory || preset.category;
+        setMediaCategory(cat);
+
+        const opts = preset.options || {};
+
+        if (cat === 'video') {
+          if (preset.format) ui.v_format.value = preset.format;
+          if (opts.vcodec) ui.v_codec.value = opts.vcodec;
+          if (opts.preset) ui.v_preset.value = opts.preset;
+          if (opts.crf) {
+            ui.v_crf.value = opts.crf;
+            ui.v_crf_val.innerText = opts.crf + (opts.crf <= 18 ? ' (无损级)' : opts.crf <= 23 ? ' (高保真)' : ' (高压缩)');
+          }
+          if (opts.scale) ui.v_scale.value = opts.scale;
+          if (opts.fps) ui.v_fps.value = opts.fps;
+          if (opts.speed) ui.v_speed.value = opts.speed;
+          if (opts.rotate) ui.v_rotate.value = opts.rotate;
+          if (opts.audioAction) ui.v_audio_action.value = opts.audioAction;
+          if (opts.abitrate) ui.v_abitrate.value = opts.abitrate;
+          if (opts.usePalette !== undefined) ui.v_gif_palette.checked = opts.usePalette;
+          ui.v_trim_start.value = opts.trimStart || '';
+          ui.v_trim_end.value = opts.trimEnd || '';
+        } else if (cat === 'audio') {
+          if (preset.format || opts.aformat) ui.a_format.value = preset.format || opts.aformat;
+          if (opts.abitrate) ui.a_bitrate.value = opts.abitrate;
+          if (opts.asamplerate) ui.a_samplerate.value = opts.asamplerate;
+          if (opts.achannels) ui.a_channels.value = opts.achannels;
+          if (opts.avolume) {
+            ui.a_volume.value = opts.avolume;
+            ui.a_volume_label.innerText = opts.avolume + '%';
+          }
+          if (opts.aloudnorm !== undefined) ui.a_loudnorm.checked = opts.aloudnorm;
+          ui.a_trim_start.value = opts.trimStart || '';
+          ui.a_trim_end.value = opts.trimEnd || '';
+        } else if (cat === 'image') {
+          if (preset.format || opts.iformat) ui.i_format.value = preset.format || opts.iformat;
+          if (opts.iquality) {
+            ui.i_quality.value = opts.iquality;
+            ui.i_quality_label.innerText = opts.iquality + '%';
+          }
+          if (opts.iscale) ui.i_scale.value = opts.iscale;
+          if (opts.irotate) ui.i_rotate.value = opts.irotate;
+          if (opts.igrayscale !== undefined) ui.i_grayscale.checked = opts.igrayscale;
+        }
+
+        ui.customCliArgs.value = opts.customArgs || '';
+
+        // 更新徽章提示
+        ui.activePresetBadge.innerText = `已应用: ${preset.name}`;
+        ui.activePresetBadge.classList.remove('hidden');
+
+        updateCliCommandPreview();
+        showToast(`已应用预设: ${preset.name}`, preset.icon || '⚡');
+      }
+
+      // ==========================================
+      // 7. 配置保存与导入导出模块
+      // ==========================================
+      // 打开保存预设模态框
+      ui.btnOpenSavePresetModal.addEventListener('click', () => {
+        ui.newPresetCategory.value = currentCategory;
+        ui.newPresetName.value = '';
+        ui.newPresetDesc.value = '';
+        ui.savePresetModal.classList.remove('hidden');
+      });
+
+      ui.btnClosePresetModal.addEventListener('click', () => ui.savePresetModal.classList.add('hidden'));
+      ui.btnCancelPresetModal.addEventListener('click', () => ui.savePresetModal.classList.add('hidden'));
+
+      // 确认保存当前配置为预设
+      ui.btnConfirmSavePreset.addEventListener('click', () => {
+        const name = ui.newPresetName.value.trim();
+        if (!name) {
+          alert('请输入预设名称！');
+          return;
+        }
+
+        const cat = ui.newPresetCategory.value;
+        const desc = ui.newPresetDesc.value.trim() || '用户自定义参数配置';
+
+        let format = 'mp4';
+        let options = {};
+
+        if (cat === 'video') {
+          format = ui.v_format.value;
+          options = {
+            vcodec: ui.v_codec.value,
+            preset: ui.v_preset.value,
+            crf: ui.v_crf.value,
+            scale: ui.v_scale.value,
+            fps: ui.v_fps.value,
+            speed: ui.v_speed.value,
+            rotate: ui.v_rotate.value,
+            audioAction: ui.v_audio_action.value,
+            abitrate: ui.v_abitrate.value,
+            usePalette: ui.v_gif_palette.checked,
+            trimStart: ui.v_trim_start.value,
+            trimEnd: ui.v_trim_end.value,
+            customArgs: ui.customCliArgs.value
+          };
+        } else if (cat === 'audio') {
+          format = ui.a_format.value;
+          options = {
+            aformat: format,
+            abitrate: ui.a_bitrate.value,
+            asamplerate: ui.a_samplerate.value,
+            achannels: ui.a_channels.value,
+            avolume: ui.a_volume.value,
+            aloudnorm: ui.a_loudnorm.checked,
+            trimStart: ui.a_trim_start.value,
+            trimEnd: ui.a_trim_end.value,
+            customArgs: ui.customCliArgs.value
+          };
+        } else if (cat === 'image') {
+          format = ui.i_format.value;
+          options = {
+            iformat: format,
+            iquality: ui.i_quality.value,
+            iscale: ui.i_scale.value,
+            irotate: ui.i_rotate.value,
+            igrayscale: ui.i_grayscale.checked,
+            customArgs: ui.customCliArgs.value
+          };
+        }
+
+        const newPreset = {
+          id: 'custom_' + Date.now(),
+          category: cat,
+          name: name,
+          desc: desc,
+          icon: cat === 'video' ? '🎬' : cat === 'audio' ? '🎵' : '🖼️',
+          badge: '自定义',
+          format: format,
+          options: options
+        };
+
+        const customs = getCustomPresets();
+        customs.unshift(newPreset);
+        saveCustomPresets(customs);
+
+        ui.savePresetModal.classList.add('hidden');
+        renderPresets();
+        showToast(`自定义预设 "${name}" 保存成功！`, '💾');
+      });
+
+      // 导出配置为 JSON 文件
+      ui.btnExportPresets.addEventListener('click', () => {
+        const customs = getCustomPresets();
+        if (customs.length === 0) {
+          if (!confirm('当前尚未创建自定义预设，是否导出全部内置标准预设？')) return;
+        }
+        const exportData = {
+          app: 'MediaTranscoderPro',
+          version: '1.0',
+          exportTime: new Date().toISOString(),
+          presets: customs.length > 0 ? customs : BUILTIN_PRESETS
+        };
+
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ffmpeg_presets_export_${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        showToast('预设配置 JSON 文件已导出！', '📤');
+      });
+
+      // 导入配置 JSON 文件
+      ui.importPresetInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const data = JSON.parse(event.target.result);
+            const importedList = Array.isArray(data) ? data : data.presets;
+            if (!importedList || !Array.isArray(importedList)) {
+              throw new Error('未在 JSON 中找到合法的 presets 预设列表！');
+            }
+
+            const customs = getCustomPresets();
+            let count = 0;
+            importedList.forEach(p => {
+              if (p.name && p.category) {
+                p.id = 'custom_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
+                p.badge = p.badge || '导入';
+                customs.unshift(p);
+                count++;
+              }
+            });
+
+            saveCustomPresets(customs);
+            renderPresets();
+            showToast(`成功导入 ${count} 个预设！`, '📥');
+          } catch (err) {
+            alert('导入失败: ' + err.message);
+          } finally {
+            ui.importPresetInput.value = '';
+          }
+        };
+        reader.readAsText(file);
+      });
+
+      // 恢复出厂设置
+      ui.btnResetPresets.addEventListener('click', () => {
+        if (confirm('确认清空所有自定义预设并恢复默认内置预设？')) {
+          localStorage.removeItem(STORAGE_KEY_PRESETS);
+          renderPresets();
+          showToast('已恢复出厂内置预设', '🔄');
+        }
+      });
+
+      // ==========================================
+      // 8. CLI 命令行参数实时构造与拆解呈现
+      // ==========================================
+      function buildFFmpegArgs(inputFileName, outputFileName) {
+        const args = [];
+        const explanations = [];
+
+        const maxCores = navigator.hardwareConcurrency || 4;
+        let selectedThreads = maxCores;
+        if (ui.mt_thread_count) {
+          const val = ui.mt_thread_count.value;
+          if (val === 'auto') selectedThreads = maxCores;
+          else selectedThreads = parseInt(val) || maxCores;
+        }
+
+        // 多线程模式下显式指定并发线程数，支持最大跑满全核 CPU 算力
+        if (currentEngineMode === 'mt') {
+          // 输入解码器分配 2~4 个线程保证输入流充裕吞吐，同时避免与重型编码器争夺 Worker 线程池
+          const inThreads = Math.min(4, Math.max(1, Math.floor(selectedThreads / 4)));
+          args.push('-threads', inThreads.toString());
+          explanations.push({ flag: `-threads ${inThreads}`, desc: `输入流解码并发 (${inThreads} 线程)` });
+        }
+
+        args.push('-i', inputFileName);
+        explanations.push({ flag: '-i ' + inputFileName, desc: '指定输入媒体文件' });
+
+        if (currentEngineMode === 'mt') {
+          // 约束滤镜单线程，防止 auto_scale / swscale 滤镜 slice 线程与编码器争抢 PThread Worker 池
+          args.push('-filter_threads', '1');
+          args.push('-threads', selectedThreads.toString());
+          explanations.push({ flag: `-threads ${selectedThreads}`, desc: `编码引擎并发加速 (${selectedThreads} 线程·跑满 CPU 算力)` });
+        }
+
+        const custom = ui.customCliArgs.value.trim();
+
+        if (currentCategory === 'video') {
+          const targetFormat = ui.v_format.value;
+
+          // 视频转音频提取专用
+          if (targetFormat === 'mp3') {
+            args.push('-vn', '-c:a', 'libmp3lame', '-b:a', '320k', '-ar', '44100');
+            explanations.push({ flag: '-vn', desc: '剥离去除视频画面流' });
+            explanations.push({ flag: '-c:a libmp3lame', desc: '高品质 LAME MP3 编码器' });
+            explanations.push({ flag: '-b:a 320k', desc: '320kbps 最高音频码率' });
+            if (custom) args.push(...custom.split(/\s+/));
+            args.push(outputFileName);
+            return { args, explanations };
+          }
+
+          // 截取时间
+          const start = parseFloat(ui.v_trim_start.value);
+          const end = parseFloat(ui.v_trim_end.value);
+          if (!isNaN(start) && start > 0) {
+            args.push('-ss', start.toString());
+            explanations.push({ flag: `-ss ${start}`, desc: `截取起始时间 (${start}秒)` });
+          }
+          if (!isNaN(end) && end > 0) {
+            args.push('-to', end.toString());
+            explanations.push({ flag: `-to ${end}`, desc: `截取结束时间 (${end}秒)` });
+          }
+
+          // GIF 格式生成
+          if (targetFormat === 'gif') {
+            const scale = ui.v_scale.value === 'custom' ? `${ui.v_custom_w.value || 480}:${ui.v_custom_h.value || -2}` : (ui.v_scale.value === 'original' ? '-1:-1' : ui.v_scale.value);
+            const fps = ui.v_fps.value === 'original' ? 15 : ui.v_fps.value;
+
+            if (ui.v_gif_palette.checked) {
+              const filterGraph = `fps=${fps},scale=${scale}:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse`;
+              args.push('-filter_complex', filterGraph);
+              explanations.push({ flag: '-filter_complex palettegen/use', desc: '智能生成高保真调色板防噪点' });
+            } else {
+              args.push('-vf', `fps=${fps},scale=${scale}`);
+              explanations.push({ flag: `-vf fps=${fps},scale=${scale}`, desc: '设定动图帧率与尺寸' });
+            }
+            if (custom) args.push(...custom.split(/\s+/));
+            args.push(outputFileName);
+            return { args, explanations };
+          }
+
+          // 普通视频编码
+          const vcodec = ui.v_codec.value;
+          args.push('-c:v', vcodec);
+          explanations.push({ flag: `-c:v ${vcodec}`, desc: vcodec === 'copy' ? '免重新编码直接封装' : '视频编码器' });
+
+          if (vcodec !== 'copy') {
+            const crf = ui.v_crf.value;
+            args.push('-crf', crf.toString());
+            explanations.push({ flag: `-crf ${crf}`, desc: `恒定速率因子质量 (CRF ${crf})` });
+
+            const preset = ui.v_preset.value;
+            args.push('-preset', preset);
+            explanations.push({ flag: `-preset ${preset}`, desc: '编码压缩计算速度' });
+
+            // 广泛设备播放兼容性
+            args.push('-pix_fmt', 'yuv420p');
+            explanations.push({ flag: '-pix_fmt yuv420p', desc: '8-bit 经典像素格式 (全平台兼容)' });
+
+            if (vcodec === 'libx264') {
+              // 关键修复：libx264 内部 lookahead 线程池在 Wasm 环境下存在函数签名强校验失配陷阱
+              // (x264_slicetype_slice_cost 返回 void 与 threadpool 期待的 void* 冲突致 call_indirect 崩溃)。
+              // 显式锁定 lookahead_threads=1 并关闭 sliced-threads，
+              // 使多线程全力作用于 Frame 级并行 (Frame-level multithreading)，既跑满全部 CPU 逻辑核，又彻底根除 Wasm 签名失配崩溃
+              args.push('-x264-params', 'lookahead_threads=1:sliced_threads=0');
+              explanations.push({ flag: '-x264-params lookahead_threads=1:sliced_threads=0', desc: 'Wasm 帧级并发安全加速 (防切片签名失配)' });
+            }
+
+            // 组装视频滤镜 vf
+            const vfilters = [];
+            const scale = ui.v_scale.value;
+            if (scale === 'custom') {
+              const w = ui.v_custom_w.value ? (parseInt(ui.v_custom_w.value) % 2 === 0 ? ui.v_custom_w.value : parseInt(ui.v_custom_w.value) + 1) : -2;
+              const h = ui.v_custom_h.value ? (parseInt(ui.v_custom_h.value) % 2 === 0 ? ui.v_custom_h.value : parseInt(ui.v_custom_h.value) + 1) : -2;
+              vfilters.push(`scale=${w}:${h}`);
+              explanations.push({ flag: `scale=${w}:${h}`, desc: '自定义宽高缩放' });
+            } else if (scale !== 'original') {
+              vfilters.push(`scale=${scale}`);
+              explanations.push({ flag: `scale=${scale}`, desc: '等比缩放分辨率' });
+            }
+
+            // 旋转
+            const rotate = ui.v_rotate.value;
+            if (rotate === '90') vfilters.push('transpose=1');
+            else if (rotate === '180') vfilters.push('transpose=2,transpose=2');
+            else if (rotate === '270') vfilters.push('transpose=2');
+            else if (rotate === 'hflip') vfilters.push('hflip');
+            else if (rotate === 'vflip') vfilters.push('vflip');
+            if (rotate !== 'none') explanations.push({ flag: `rotate/flip (${rotate})`, desc: '画面方向旋转与翻转' });
+
+            // 帧率
+            const fps = ui.v_fps.value;
+            if (fps !== 'original') {
+              args.push('-r', fps);
+              explanations.push({ flag: `-r ${fps}`, desc: `强制设定输出帧率 (${fps} fps)` });
+            }
+
+            // 倍速
+            const speed = parseFloat(ui.v_speed.value);
+            if (speed !== 1.0) {
+              const ptsFactor = (1 / speed).toFixed(4);
+              vfilters.push(`setpts=${ptsFactor}*PTS`);
+              explanations.push({ flag: `setpts=${ptsFactor}*PTS`, desc: `画面播放倍速 (${speed}x)` });
+            }
+
+            if (vfilters.length > 0) {
+              args.push('-vf', vfilters.join(','));
+            }
+          }
+
+          // 音频动作
+          const audioAction = ui.v_audio_action.value;
+          if (audioAction === 'mute') {
+            args.push('-an');
+            explanations.push({ flag: '-an', desc: '去除静音 (禁用音轨)' });
+          } else if (audioAction === 'copy') {
+            args.push('-c:a', 'copy');
+            explanations.push({ flag: '-c:a copy', desc: '音轨无损直接拷贝' });
+          } else {
+            args.push('-c:a', 'aac', '-b:a', ui.v_abitrate.value);
+            explanations.push({ flag: '-c:a aac', desc: 'AAC 音频编码器' });
+            explanations.push({ flag: `-b:a ${ui.v_abitrate.value}`, desc: '音频输出码率' });
+
+            const speed = parseFloat(ui.v_speed.value);
+            if (speed !== 1.0) {
+              args.push('-filter:a', `atempo=${speed}`);
+              explanations.push({ flag: `atempo=${speed}`, desc: `音轨同步倍速 (${speed}x)` });
+            }
+          }
+
+        } else if (currentCategory === 'audio') {
+          const aformat = ui.a_format.value;
+          const start = parseFloat(ui.a_trim_start.value);
+          const end = parseFloat(ui.a_trim_end.value);
+          if (!isNaN(start) && start > 0) args.push('-ss', start.toString());
+          if (!isNaN(end) && end > 0) args.push('-to', end.toString());
+
+          // 编码器
+          if (aformat === 'mp3') {
+            args.push('-c:a', 'libmp3lame', '-b:a', ui.a_bitrate.value);
+            explanations.push({ flag: '-c:a libmp3lame', desc: 'MP3 LAME 编码引擎' });
+            explanations.push({ flag: `-b:a ${ui.a_bitrate.value}`, desc: '音频比特率' });
+          } else if (aformat === 'wav') {
+            args.push('-c:a', 'pcm_s16le');
+            explanations.push({ flag: '-c:a pcm_s16le', desc: '16-bit 线性 PCM 无损' });
+          } else if (aformat === 'flac') {
+            args.push('-c:a', 'flac');
+            explanations.push({ flag: '-c:a flac', desc: 'FLAC 无损压缩算法' });
+          } else if (aformat === 'm4a' || aformat === 'aac') {
+            args.push('-c:a', 'aac', '-b:a', ui.a_bitrate.value);
+            explanations.push({ flag: '-c:a aac', desc: 'AAC 格式' });
+          } else if (aformat === 'opus') {
+            args.push('-c:a', 'libopus', '-b:a', ui.a_bitrate.value);
+            explanations.push({ flag: '-c:a libopus', desc: 'Opus 极速低延迟音频' });
+          }
+
+          // 采样率
+          if (ui.a_samplerate.value !== 'original') {
+            args.push('-ar', ui.a_samplerate.value);
+            explanations.push({ flag: `-ar ${ui.a_samplerate.value}`, desc: '音频采样频率' });
+          }
+
+          // 声道
+          args.push('-ac', ui.a_channels.value);
+          explanations.push({ flag: `-ac ${ui.a_channels.value}`, desc: ui.a_channels.value === '1' ? '单声道 (Mono)' : '双声道 (Stereo)' });
+
+          // 音频滤镜 (音量增益 + 响度标准化)
+          const afilters = [];
+          const vol = parseInt(ui.a_volume.value);
+          if (vol !== 100) {
+            const factor = (vol / 100).toFixed(2);
+            afilters.push(`volume=${factor}`);
+            explanations.push({ flag: `volume=${factor}`, desc: `音量调节 (${vol}%)` });
+          }
+          if (ui.a_loudnorm.checked) {
+            afilters.push('loudnorm');
+            explanations.push({ flag: 'loudnorm', desc: 'EBU R128 标准响度均衡' });
+          }
+          if (afilters.length > 0) {
+            args.push('-af', afilters.join(','));
+          }
+
+          // 禁用多余视频轨
+          args.push('-vn');
+
+        } else if (currentCategory === 'image') {
+          const iformat = ui.i_format.value;
+          const ifilters = [];
+
+          // 缩放
+          const scale = ui.i_scale.value;
+          if (scale === 'custom') {
+            const w = ui.i_custom_w.value || -1;
+            const h = ui.i_custom_h.value || -1;
+            ifilters.push(`scale=${w}:${h}`);
+            explanations.push({ flag: `scale=${w}:${h}`, desc: '指定尺寸缩放' });
+          } else if (scale !== 'original') {
+            ifilters.push(`scale=${scale}`);
+            explanations.push({ flag: `scale=${scale}`, desc: '预设缩放规格' });
+          }
+
+          // 旋转
+          const rotate = ui.i_rotate.value;
+          if (rotate === '90') ifilters.push('transpose=1');
+          else if (rotate === '180') ifilters.push('transpose=2,transpose=2');
+          else if (rotate === '270') ifilters.push('transpose=2');
+          else if (rotate === 'hflip') ifilters.push('hflip');
+          else if (rotate === 'vflip') ifilters.push('vflip');
+
+          // 黑白
+          if (ui.i_grayscale.checked) {
+            ifilters.push('format=gray');
+            explanations.push({ flag: 'format=gray', desc: '转换单通道灰度图' });
+          }
+
+          if (ifilters.length > 0) {
+            args.push('-vf', ifilters.join(','));
+          }
+
+          // 编码器与质量
+          const q = parseInt(ui.i_quality.value);
+          if (iformat === 'webp') {
+            args.push('-c:v', 'libwebp', '-quality', q.toString());
+            explanations.push({ flag: '-c:v libwebp', desc: 'WebP 图像编码器' });
+            explanations.push({ flag: `-quality ${q}`, desc: `WebP 压缩品质 (${q}%)` });
+          } else if (iformat === 'jpg' || iformat === 'jpeg') {
+            args.push('-c:v', 'mjpeg');
+            explanations.push({ flag: '-c:v mjpeg', desc: 'JPEG 图像编码器' });
+            // ffmpeg -q:v 2 是高画质 (范围 1-31)
+            const qv = Math.max(1, Math.min(31, Math.round((100 - q) / 100 * 30 + 1)));
+            args.push('-q:v', qv.toString());
+            explanations.push({ flag: `-q:v ${qv}`, desc: `JPEG 质量因子 (映射为 ${qv})` });
+          } else if (iformat === 'png') {
+            args.push('-c:v', 'png', '-compression_level', '9');
+            explanations.push({ flag: '-c:v png', desc: 'PNG 无损编码器' });
+            explanations.push({ flag: '-compression_level 9', desc: 'PNG 最大无损压缩级别' });
+          }
+        }
+
+        // 追加用户自定义命令行参数
+        if (custom) {
+          args.push(...custom.split(/\s+/).filter(Boolean));
+          explanations.push({ flag: custom, desc: '用户手动自定义高阶附加参数' });
+        }
+
+        args.push(outputFileName);
+        explanations.push({ flag: outputFileName, desc: '目标输出文件' });
+
+        return { args, explanations };
+      }
+
+      function updateCliCommandPreview() {
+        const dummyInput = `input.${currentCategory === 'video' ? 'mp4' : currentCategory === 'audio' ? 'wav' : 'png'}`;
+        let targetExt = 'mp4';
+        if (currentCategory === 'video') targetExt = ui.v_format.value;
+        else if (currentCategory === 'audio') targetExt = ui.a_format.value;
+        else if (currentCategory === 'image') targetExt = ui.i_format.value;
+
+        const dummyOutput = `output.${targetExt}`;
+        const { args, explanations } = buildFFmpegArgs(dummyInput, dummyOutput);
+
+        ui.cliPreviewText.innerText = `ffmpeg ${args.map(a => a.includes(' ') || a.includes(';') ? `"${a}"` : a).join(' ')}`;
+
+        ui.cliExplanationBox.innerHTML = '';
+        explanations.forEach(item => {
+          const badge = document.createElement('span');
+          badge.className = 'px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600';
+          badge.innerHTML = `<strong class="text-indigo-600 dark:text-indigo-400 font-mono">${escapeHtml(item.flag)}</strong>: ${escapeHtml(item.desc)}`;
+          ui.cliExplanationBox.appendChild(badge);
+        });
+      }
+
+      // 绑定表单改动时自动更新 CLI 预览
+      const watchInputs = [
+        ui.v_format, ui.v_codec, ui.v_preset, ui.v_crf, ui.v_scale, ui.v_audio_action, ui.v_abitrate, ui.v_fps, ui.v_speed, ui.v_rotate, ui.v_trim_start, ui.v_trim_end, ui.v_gif_palette,
+        ui.a_format, ui.a_bitrate, ui.a_samplerate, ui.a_channels, ui.a_volume, ui.a_trim_start, ui.a_trim_end, ui.a_loudnorm,
+        ui.i_format, ui.i_quality, ui.i_scale, ui.i_rotate, ui.i_grayscale, ui.customCliArgs, ui.mt_thread_count
+      ];
+      watchInputs.forEach(el => {
+        el.addEventListener('input', () => {
+          // 处理动态标签文字
+          if (el === ui.v_crf) {
+            const v = ui.v_crf.value;
+            ui.v_crf_val.innerText = v + (v <= 18 ? ' (无损级)' : v <= 23 ? ' (高保真)' : v <= 28 ? ' (微信压缩)' : ' (超小体积)');
+          } else if (el === ui.a_volume) {
+            ui.a_volume_label.innerText = ui.a_volume.value + '%';
+          } else if (el === ui.i_quality) {
+            ui.i_quality_label.innerText = ui.i_quality.value + '%';
+          } else if (el === ui.v_format) {
+            ui.v_gif_opt_box.classList.toggle('hidden', ui.v_format.value !== 'gif');
+          } else if (el === ui.v_scale) {
+            ui.v_custom_scale_box.classList.toggle('hidden', ui.v_scale.value !== 'custom');
+          } else if (el === ui.i_scale) {
+            ui.i_custom_scale_box.classList.toggle('hidden', ui.i_scale.value !== 'custom');
+          }
+          updateCliCommandPreview();
+        });
+      });
+
+      ui.btnCopyCli.addEventListener('click', () => {
+        copyText(ui.cliPreviewText.innerText, '已复制完整 FFmpeg 命令！');
+      });
+
+      // 日志按钮
+      ui.btnClearLogs.addEventListener('click', () => {
+        rawLogLines = [];
+        ui.terminalPanel.innerHTML = '<span class="text-slate-500">// 日志已清空</span><br>';
+      });
+      ui.btnCopyLogs.addEventListener('click', () => {
+        copyText(rawLogLines.join('\n'), '已复制全部控制台日志！');
+      });
+      ui.btnDownloadLogs.addEventListener('click', () => {
+        const blob = new Blob([rawLogLines.join('\n')], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ffmpeg_run_${new Date().toISOString().slice(0, 19).replace(/[:]/g, '-')}.log`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      });
+
+      // ==========================================
+      // 9. 文件队列系统与批处理调度
+      // ==========================================
+      function addFilesToQueue(files) {
+        if (!files || files.length === 0) return;
+
+        Array.from(files).forEach(file => {
+          const cat = detectFileType(file);
+          const queueItem = {
+            id: 'item_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+            file: file,
+            name: file.name,
+            size: file.size,
+            typeCategory: cat,
+            status: 'pending', // 'pending' | 'processing' | 'done' | 'error'
+            outputBlob: null,
+            outputUrl: null,
+            outputSize: 0,
+            outputName: '',
+            errorMsg: ''
+          };
+          fileQueue.push(queueItem);
+        });
+
+        renderQueue();
+        if (activeQueueIndex === -1 && fileQueue.length > 0) {
+          selectQueueItem(0);
+        }
+        showToast(`已添加 ${files.length} 个文件到转码队列`, '📥');
+      }
+
+      function renderQueue() {
+        ui.queueCountBadge.innerText = fileQueue.length;
+        ui.btnStartBatch.disabled = fileQueue.length === 0 || isProcessing;
+        ui.emptyQueueTip.classList.toggle('hidden', fileQueue.length > 0);
+
+        // 仅移除动态队列节点
+        const existingNodes = ui.fileQueueList.querySelectorAll('.queue-item-row');
+        existingNodes.forEach(n => n.remove());
+
+        let hasDone = false;
+
+        fileQueue.forEach((item, index) => {
+          if (item.status === 'done') hasDone = true;
+
+          const row = document.createElement('div');
+          const isSelected = index === activeQueueIndex;
+          row.className = `queue-item-row p-2.5 rounded-xl border ${isSelected ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30' : 'border-slate-200/70 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-700/20'} hover:border-indigo-400 transition cursor-pointer flex items-center justify-between gap-3 text-xs`;
+
+          const typeIcon = item.typeCategory === 'video' ? '🎬' : item.typeCategory === 'audio' ? '🎵' : '🖼️';
+          let statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">排队中</span>`;
+          if (item.status === 'processing') {
+            statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300 animate-pulse">转码中...</span>`;
+          } else if (item.status === 'done') {
+            statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">✅ 完成</span>`;
+          } else if (item.status === 'error') {
+            statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300" title="${escapeHtml(item.errorMsg || '转码失败')}">❌ 失败</span>`;
+          }
+
+          row.innerHTML = `
+            <div class="flex items-center space-x-2.5 min-w-0 flex-1">
+              <span class="text-base flex-shrink-0">${typeIcon}</span>
+              <div class="min-w-0 flex-1">
+                <p class="font-medium text-slate-800 dark:text-slate-100 truncate">${escapeHtml(item.name)}</p>
+                <div class="flex items-center space-x-2 text-[10px] text-slate-400 font-mono">
+                  <span>${formatBytes(item.size)}</span>
+                  ${item.outputSize > 0 ? `<span>→ <strong class="text-emerald-500">${formatBytes(item.outputSize)}</strong></span>` : ''}
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center space-x-2 flex-shrink-0">
+              ${statusBadge}
+              ${item.status === 'done' ? `
+                <button data-dl="${item.id}" class="p-1 rounded text-emerald-600 hover:bg-emerald-100 dark:hover:bg-emerald-950 transition" title="下载转换后的文件">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                </button>
+              ` : `
+                <button data-remove="${item.id}" class="text-slate-400 hover:text-red-500 transition p-1" title="移除该项">✕</button>
+              `}
+            </div>
+          `;
+
+          row.addEventListener('click', (e) => {
+            if (e.target.closest('[data-remove]') || e.target.closest('[data-dl]')) return;
+            selectQueueItem(index);
+          });
+
+          const rmBtn = row.querySelector(`[data-remove="${item.id}"]`);
+          if (rmBtn) {
+            rmBtn.addEventListener('click', () => {
+              fileQueue.splice(index, 1);
+              if (activeQueueIndex >= fileQueue.length) activeQueueIndex = fileQueue.length - 1;
+              renderQueue();
+              if (activeQueueIndex >= 0) selectQueueItem(activeQueueIndex);
+              else clearPreviewBox();
+            });
+          }
+
+          const dlBtn = row.querySelector(`[data-dl="${item.id}"]`);
+          if (dlBtn) {
+            dlBtn.addEventListener('click', () => {
+              downloadQueueItem(item);
+            });
+          }
+
+          ui.fileQueueList.appendChild(row);
+        });
+
+        ui.btnDownloadAllCompleted.classList.toggle('hidden', !hasDone);
+      }
+
+      function selectQueueItem(index) {
+        if (index < 0 || index >= fileQueue.length) return;
+        activeQueueIndex = index;
+        const item = fileQueue[index];
+
+        // 切换配置类别匹配当前文件
+        setMediaCategory(item.typeCategory);
+
+        // 渲染对比预览区
+        renderPreviewForItem(item);
+        renderQueue();
+      }
+
+      function clearPreviewBox() {
+        ui.previewMediaBadge.innerText = '未选择';
+        ui.origSizeLabel.innerText = '0 B';
+        ui.origPreviewBox.innerHTML = '<span class="text-xs text-slate-400">选择文件后在此预览</span>';
+        ui.outputSizeLabel.innerText = '-';
+        ui.outputDiffBadge.classList.add('hidden');
+        ui.outputPreviewBox.innerHTML = '<span class="text-xs text-slate-400">转换成功后在此实时预览与下载</span>';
+        ui.outputActionBox.classList.add('hidden');
+      }
+
+      function renderPreviewForItem(item) {
+        ui.previewMediaBadge.innerText = `${item.name.split('.').pop().toUpperCase()} · ${item.typeCategory.toUpperCase()}`;
+        ui.origSizeLabel.innerText = formatBytes(item.size);
+
+        // 渲染原文件预览
+        const origUrl = URL.createObjectURL(item.file);
+        ui.origPreviewBox.innerHTML = '';
+
+        if (item.typeCategory === 'video') {
+          const video = document.createElement('video');
+          video.src = origUrl;
+          video.controls = true;
+          video.className = 'w-full h-full object-contain';
+          ui.origPreviewBox.appendChild(video);
+        } else if (item.typeCategory === 'audio') {
+          const div = document.createElement('div');
+          div.className = 'w-full p-4 flex flex-col items-center justify-center space-y-2';
+          div.innerHTML = `<span class="text-3xl">🎵</span><span class="text-xs text-slate-500 font-mono truncate max-w-xs">${escapeHtml(item.name)}</span>`;
+          const audio = document.createElement('audio');
+          audio.src = origUrl;
+          audio.controls = true;
+          audio.className = 'w-full mt-2';
+          div.appendChild(audio);
+          ui.origPreviewBox.appendChild(div);
+        } else if (item.typeCategory === 'image') {
+          const img = document.createElement('img');
+          img.src = origUrl;
+          img.className = 'w-full h-full object-contain checkerboard-bg';
+          ui.origPreviewBox.appendChild(img);
+        }
+
+        // 渲染输出文件 (如果有)
+        if (item.outputBlob && item.outputUrl) {
+          renderOutputPreview(item);
+        } else {
+          ui.outputSizeLabel.innerText = '-';
+          ui.outputDiffBadge.classList.add('hidden');
+          ui.outputPreviewBox.innerHTML = `<span class="text-xs text-slate-400">${item.status === 'processing' ? '⏳ 正在进行 FFmpeg 渲染中...' : '转换成功后在此实时预览与下载'}</span>`;
+          ui.outputActionBox.classList.add('hidden');
+        }
+      }
+
+      function renderOutputPreview(item) {
+        ui.outputSizeLabel.innerText = formatBytes(item.outputSize);
+        const diff = item.outputSize - item.size;
+        const diffPercent = ((diff / item.size) * 100).toFixed(1);
+
+        ui.outputDiffBadge.classList.remove('hidden');
+        if (diff < 0) {
+          ui.outputDiffBadge.className = 'px-1.5 py-0.2 rounded text-[11px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300';
+          ui.outputDiffBadge.innerText = `已减小 ${Math.abs(diffPercent)}%`;
+        } else {
+          ui.outputDiffBadge.className = 'px-1.5 py-0.2 rounded text-[11px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300';
+          ui.outputDiffBadge.innerText = `体积 +${diffPercent}%`;
+        }
+
+        ui.outputPreviewBox.innerHTML = '';
+        const ext = item.outputName.split('.').pop().toLowerCase();
+
+        if (['mp4', 'webm', 'mov', 'mkv', 'avi'].includes(ext)) {
+          const video = document.createElement('video');
+          video.src = item.outputUrl;
+          video.controls = true;
+          video.className = 'w-full h-full object-contain';
+          ui.outputPreviewBox.appendChild(video);
+        } else if (['mp3', 'wav', 'flac', 'm4a', 'aac', 'ogg', 'opus'].includes(ext)) {
+          const div = document.createElement('div');
+          div.className = 'w-full p-4 flex flex-col items-center justify-center space-y-2';
+          div.innerHTML = `<span class="text-3xl">🎧</span><span class="text-xs text-emerald-600 font-mono truncate max-w-xs">${escapeHtml(item.outputName)}</span>`;
+          const audio = document.createElement('audio');
+          audio.src = item.outputUrl;
+          audio.controls = true;
+          audio.className = 'w-full mt-2';
+          div.appendChild(audio);
+          ui.outputPreviewBox.appendChild(div);
+        } else {
+          // 图片或 GIF
+          const img = document.createElement('img');
+          img.src = item.outputUrl;
+          img.className = 'w-full h-full object-contain checkerboard-bg';
+          ui.outputPreviewBox.appendChild(img);
+        }
+
+        ui.outputActionBox.classList.remove('hidden');
+      }
+
+      function downloadQueueItem(item) {
+        if (!item.outputBlob) return;
+        const a = document.createElement('a');
+        a.href = item.outputUrl;
+        a.download = item.outputName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        showToast(`正在下载 ${item.outputName}`, '⬇️');
+      }
+
+      ui.btnDownloadCurrent.addEventListener('click', () => {
+        if (activeQueueIndex >= 0 && fileQueue[activeQueueIndex]) {
+          downloadQueueItem(fileQueue[activeQueueIndex]);
+        }
+      });
+
+      ui.btnDownloadAllCompleted.addEventListener('click', () => {
+        fileQueue.forEach(item => {
+          if (item.status === 'done' && item.outputBlob) {
+            downloadQueueItem(item);
+          }
+        });
+      });
+
+      ui.btnClearQueue.addEventListener('click', () => {
+        if (isProcessing) {
+          alert('正在转码中，请等待完成');
+          return;
+        }
+        fileQueue = [];
+        activeQueueIndex = -1;
+        renderQueue();
+        clearPreviewBox();
+      });
+
+      // 拖拽与上传事件
+      ui.dropZone.addEventListener('click', () => ui.mediaInput.click());
+      ui.mediaInput.addEventListener('change', (e) => {
+        addFilesToQueue(e.target.files);
+        ui.mediaInput.value = '';
+      });
+
+      ui.dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        ui.dropZone.classList.add('border-indigo-500', 'bg-indigo-50/50', 'dark:bg-indigo-950/20');
+      });
+      ui.dropZone.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        ui.dropZone.classList.remove('border-indigo-500', 'bg-indigo-50/50', 'dark:bg-indigo-950/20');
+      });
+      ui.dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        ui.dropZone.classList.remove('border-indigo-500', 'bg-indigo-50/50', 'dark:bg-indigo-950/20');
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          addFilesToQueue(e.dataTransfer.files);
+        }
+      });
+
+      // ==========================================
+      // 10. FFmpeg WebAssembly 核心初始化与执行引擎
+      // ==========================================
+      async function ensureFFmpegLoaded() {
+        window.ensureFFmpegLoaded = ensureFFmpegLoaded;
+        if (isFFmpegLoaded && ffmpeg.loaded) return;
+
+        ui.progressCard.classList.remove('hidden');
+        ui.progressTitle.innerText = '正在初始化 FFmpeg.wasm 核心组件 (约 30MB)...';
+        ui.progressBar.style.width = '30%';
+
+        appendTerminalLog('开始检测运行环境并准备初始化 WebAssembly 核心组件...');
+
+        ffmpeg.on('log', ({ message }) => {
+          rawLogLines.push(message);
+          appendTerminalLog(message);
+
+          // 从 ffmpeg stderr 提取实时进度
+          if (message.includes('time=')) {
+            const timeMatch = message.match(/time=(\d{2}:\d{2}:\d{2}\.\d{2})/);
+            const speedMatch = message.match(/speed=\s*([\d\.]+x)/);
+            if (timeMatch) ui.progressTime.innerText = `进度时间: ${timeMatch[1]}`;
+            if (speedMatch) ui.progressSpeed.innerText = `转码速率: ${speedMatch[1]}`;
+          }
+        });
+
+        ffmpeg.on('progress', ({ progress, time }) => {
+          if (progress > 0 && progress <= 1) {
+            const pct = Math.round(progress * 100);
+            ui.progressPercent.innerText = `${pct}%`;
+            ui.progressBar.style.width = `${pct}%`;
+          }
+        });
+
+        if (currentEngineMode === 'mt') {
+          // 强制优先加载多线程极速核心 (@ffmpeg/core-mt@0.12.6)
+          appendTerminalLog('🚀 正在优先加载多线程极速核心 (@ffmpeg/core-mt@0.12.6)...');
+          ui.progressTitle.innerText = '正在加载多线程极速核心 (@ffmpeg/core-mt)...';
+
+          const ts = Date.now();
+          const relCoreMT = new URL(`./assets/@ffmpeg/core-mt@0.12.6/dist/esm/ffmpeg-core.js?t=${ts}`, import.meta.url).href;
+          const relWasmMT = new URL(`./assets/@ffmpeg/core-mt@0.12.6/dist/esm/ffmpeg-core.wasm?t=${ts}`, import.meta.url).href;
+          const relWorkerMT = new URL(`./assets/@ffmpeg/core-mt@0.12.6/dist/esm/ffmpeg-core.worker.js?t=${ts}`, import.meta.url).href;
+
+          try {
+            const loadPromise = ffmpeg.load({
+              coreURL: relCoreMT,
+              wasmURL: relWasmMT,
+              workerURL: relWorkerMT,
+            });
+
+            const timeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('多线程核心加载超时 (8s)，检测到浏览器 Worker 线程池响应挂起')), 8000)
+            );
+
+            await Promise.race([loadPromise, timeoutPromise]);
+
+            isFFmpegLoaded = true;
+            updateEngineBadge('mt', 'loaded');
+            appendTerminalLog(`🎉 多线程核心 (@ffmpeg/core-mt@0.12.6) 加载成功！已激活 CPU 并发多核加速 (${navigator.hardwareConcurrency || 4} 核心)`);
+          } catch (errMT) {
+            console.warn('Multi-threaded core loading failed, falling back to ST:', errMT);
+            appendTerminalLog(`⚠️ 多线程极速核心启动受限 (${errMT.message || errMT})，正在自动无缝切换为单线程兼容核心继续处理...`, 'warning');
+            try { ffmpeg.terminate(); } catch (_) {}
+            ffmpeg = new FFmpeg();
+            currentEngineMode = 'st';
+            updateEngineBadge('st', 'ready');
+            return ensureFFmpegLoaded();
+          }
+        } else {
+          // 加载单线程核心 (@ffmpeg/core@0.12.4)
+          ui.progressTitle.innerText = '正在加载单线程安全核心 (@ffmpeg/core@0.12.4)...';
+          appendTerminalLog('💡 正在加载单线程核心 (@ffmpeg/core@0.12.4)...');
+          const relCore = new URL('./assets/@ffmpeg/core@0.12.4/dist/esm/ffmpeg-core.js', import.meta.url).href;
+          const relWasm = new URL('./assets/@ffmpeg/core@0.12.4/dist/esm/ffmpeg-core.wasm', import.meta.url).href;
+
+          try {
+            await ffmpeg.load({
+              coreURL: relCore,
+              wasmURL: relWasm,
+            });
+
+            isFFmpegLoaded = true;
+            updateEngineBadge('st', 'loaded');
+            appendTerminalLog('✅ 单线程核心加载成功！全平台环境通用兼容。');
+          } catch (errST) {
+            console.error('All FFmpeg core loading attempts failed', errST);
+            appendTerminalLog('❌ FFmpeg 核心初始化失败: ' + errST.message, 'error');
+            throw errST;
+          }
+        }
+
+        ui.progressBar.style.width = '100%';
+      }
+
+      // 执行队列批量转换
+      ui.btnStartBatch.addEventListener('click', async () => {
+        if (isProcessing) return;
+        const pendingItems = fileQueue.filter(item => item.status === 'pending' || item.status === 'error');
+        if (pendingItems.length === 0) {
+          showToast('队列中没有待转换的文件', 'ℹ️');
+          return;
+        }
+
+        isProcessing = true;
+        ui.btnStartBatch.disabled = true;
+        ui.btnStartBatch.innerText = '⏳ 正在转码处理中...';
+
+        try {
+          await ensureFFmpegLoaded();
+
+          for (let i = 0; i < fileQueue.length; i++) {
+            const item = fileQueue[i];
+            if (item.status === 'done') continue;
+
+            selectQueueItem(i);
+            item.status = 'processing';
+            renderQueue();
+
+            ui.progressCard.classList.remove('hidden');
+            ui.progressTitle.innerText = `正在处理: ${item.name}`;
+            ui.progressBar.style.width = '0%';
+            ui.progressPercent.innerText = '0%';
+
+            appendTerminalLog(`\n========== 开始转码 [${i + 1}/${fileQueue.length}]: ${item.name} ==========`);
+
+            // 确定目标扩展名
+            let targetExt = 'mp4';
+            if (currentCategory === 'video') targetExt = ui.v_format.value;
+            else if (currentCategory === 'audio') targetExt = ui.a_format.value;
+            else if (currentCategory === 'image') targetExt = ui.i_format.value;
+
+            const baseName = item.name.substring(0, item.name.lastIndexOf('.')) || item.name;
+            const outputFileName = `${baseName}_converted.${targetExt}`;
+
+            // 安全输入文件名 (防止中文特殊字符在虚拟 FS 中异常)
+            const safeInputName = `input_${Date.now()}_${i}.${item.name.split('.').pop() || 'tmp'}`;
+            const safeOutputName = `output_${Date.now()}_${i}.${targetExt}`;
+
+            try {
+              // 1. 将文件二进制写入 FFmpeg 虚拟文件系统
+              appendTerminalLog(`写入虚拟文件系统: ${safeInputName} (${formatBytes(item.size)})...`);
+              await ffmpeg.writeFile(safeInputName, await fetchFile(item.file));
+
+              // 2. 组装 FFmpeg 命令参数
+              const { args } = buildFFmpegArgs(safeInputName, safeOutputName);
+              appendTerminalLog(`执行命令: ffmpeg ${args.map(a => a.includes(' ') || a.includes(';') ? `"${a}"` : a).join(' ')}`);
+
+              // 3. 调用 FFmpeg.wasm 执行转换
+              const startTime = performance.now();
+              await ffmpeg.exec(args);
+              const durationSec = ((performance.now() - startTime) / 1000).toFixed(2);
+
+              // 4. 读取产物
+              const outputData = await ffmpeg.readFile(safeOutputName);
+              const outputUint8 = new Uint8Array(outputData);
+
+              let mimeType = 'application/octet-stream';
+              if (['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(targetExt)) mimeType = `video/${targetExt === 'mkv' ? 'x-matroska' : targetExt}`;
+              else if (['mp3', 'wav', 'aac', 'flac', 'ogg', 'opus'].includes(targetExt)) mimeType = `audio/${targetExt}`;
+              else if (['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'ico'].includes(targetExt)) mimeType = `image/${targetExt === 'ico' ? 'x-icon' : targetExt}`;
+
+              const blob = new Blob([outputUint8], { type: mimeType });
+              const url = URL.createObjectURL(blob);
+
+              item.outputBlob = blob;
+              item.outputUrl = url;
+              item.outputSize = blob.size;
+              item.outputName = outputFileName;
+              item.status = 'done';
+
+              appendTerminalLog(`转码完成！耗时: ${durationSec}s，输出文件体积: ${formatBytes(blob.size)}`);
+
+              // 5. 立即清理虚拟文件系统释放 WebAssembly 内存
+              await ffmpeg.deleteFile(safeInputName);
+              await ffmpeg.deleteFile(safeOutputName);
+
+              renderQueue();
+              renderPreviewForItem(item);
+              showToast(`文件 "${item.name}" 转换成功！`, '🎉');
+
+            } catch (itemErr) {
+              console.error(itemErr);
+              item.status = 'error';
+              item.errorMsg = itemErr.message || '转码失败';
+              appendTerminalLog(`处理出错: ${itemErr.message}`, 'error');
+              renderQueue();
+            }
+          }
+
+          showToast('队列全部任务已处理完毕！', '🚀');
+        } catch (globalErr) {
+          console.error(globalErr);
+          alert('批量转码发生错误: ' + globalErr.message);
+        } finally {
+          isProcessing = false;
+          ui.btnStartBatch.disabled = false;
+          ui.btnStartBatch.innerText = '🚀 开始转换队列文件';
+          ui.progressCard.classList.add('hidden');
+        }
+      });
+
+      // ==========================================
+      // 11. 页面初始化引导
+      // ==========================================
+      function init() {
+        renderPresets();
+        updateCliCommandPreview();
+        const cores = navigator.hardwareConcurrency || 4;
+        updateEngineBadge('mt', 'ready');
+
+        // 动态检测与填充 CPU 并发线程选项
+        if (ui.detectedCoresBadge) {
+          ui.detectedCoresBadge.innerText = `探测到 ${cores} 个 CPU 逻辑核心`;
+        }
+        if (ui.mt_thread_count) {
+          const threadOpts = [];
+          threadOpts.push(`<option value="auto" selected>🔥 自动跑满全核 (${cores} 线程·极速转码)</option>`);
+          if (cores >= 16) threadOpts.push(`<option value="16">⚡ 16 线程 (全核全力并发)</option>`);
+          if (cores >= 12) threadOpts.push(`<option value="12">🚀 12 线程 (高性能·保留余量)</option>`);
+          if (cores >= 8) threadOpts.push(`<option value="8">⚖️ 8 线程 (平衡模式)</option>`);
+          threadOpts.push(`<option value="4">🍃 4 线程 (轻量节能)</option>`);
+          threadOpts.push(`<option value="2">🛡️ 2 线程 (低负载防护)</option>`);
+          ui.mt_thread_count.innerHTML = threadOpts.join('');
+
+          ui.mt_thread_count.addEventListener('change', () => {
+            updateCliCommandPreview();
+            const val = ui.mt_thread_count.value;
+            const chosen = val === 'auto' ? cores : val;
+            showToast(`已调整转码并发线程为: ${chosen} 线程`, '⚡');
+          });
+        }
+
+        appendTerminalLog(`系统初始化就绪。已配置为【强制加载多线程核心 (@ffmpeg/core-mt@0.12.6)】，并发 CPU 核心数: ${cores} 核`);
+
+        const badge = document.getElementById('engineStatusBadge');
+        if (badge) {
+          badge.addEventListener('click', () => {
+            if (isFFmpegLoaded) {
+              appendTerminalLog('ℹ️ FFmpeg 核心已加载至内存。如需更换核心，请刷新页面并在首次转码前点击徽章切换。', 'warning');
+              return;
+            }
+            currentEngineMode = currentEngineMode === 'mt' ? 'st' : 'mt';
+            updateEngineBadge(currentEngineMode, 'ready');
+            appendTerminalLog(`🔄 用户已手动切换核心为: ${currentEngineMode === 'mt' ? '【强制多线程 Core-MT】' : '【单线程安全模式 Core-ST】'}`);
+          });
+        }
+      }
+
+      init();
+
+    </script>
+  </body>
+</html>

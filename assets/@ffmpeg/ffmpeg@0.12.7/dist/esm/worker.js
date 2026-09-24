@@ -23,11 +23,20 @@ const load = async ({ coreURL: _coreURL = CORE_URL, wasmURL: _wasmURL, workerURL
             throw ERROR_IMPORT_FAILURE;
         }
     }
+    self.postMessage({ type: FFMessageType.LOG, data: { message: "worker.js: calling createFFmpegCore..." } });
     ffmpeg = await self.createFFmpegCore({
         // Fix `Overload resolution failed.` when using multi-threaded ffmpeg-core.
         // Encoded wasmURL and workerURL in the URL as a hack to fix locateFile issue.
         mainScriptUrlOrBlob: `${coreURL}#${btoa(JSON.stringify({ wasmURL, workerURL }))}`,
+        locateFile: (path, prefix) => {
+            if (path.endsWith('.wasm')) return wasmURL;
+            if (path.endsWith('.worker.js')) return workerURL;
+            return prefix + path;
+        },
+        print: (msg) => self.postMessage({ type: FFMessageType.LOG, data: { message: `[STDOUT] ${msg}` } }),
+        printErr: (msg) => self.postMessage({ type: FFMessageType.LOG, data: { message: `[STDERR] ${msg}` } }),
     });
+    self.postMessage({ type: FFMessageType.LOG, data: { message: "worker.js: createFFmpegCore returned successfully!" } });
     ffmpeg.setLogger((data) => self.postMessage({ type: FFMessageType.LOG, data }));
     ffmpeg.setProgress((data) => self.postMessage({
         type: FFMessageType.PROGRESS,
@@ -89,6 +98,7 @@ const unmount = ({ mountPoint }) => {
     return true;
 };
 self.onmessage = async ({ data: { id, type, data: _data }, }) => {
+    self.postMessage({ type: FFMessageType.LOG, data: { message: `[worker.js] onmessage received type: ${type}` } });
     const trans = [];
     let data;
     try {
@@ -96,7 +106,9 @@ self.onmessage = async ({ data: { id, type, data: _data }, }) => {
             throw ERROR_NOT_LOADED;
         switch (type) {
             case FFMessageType.LOAD:
+                self.postMessage({ type: FFMessageType.LOG, data: { message: `[worker.js] starting load()...` } });
                 data = await load(_data);
+                self.postMessage({ type: FFMessageType.LOG, data: { message: `[worker.js] load() finished successfully!` } });
                 break;
             case FFMessageType.EXEC:
                 data = exec(_data);

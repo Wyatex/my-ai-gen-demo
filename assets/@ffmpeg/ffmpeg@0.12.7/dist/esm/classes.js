@@ -25,11 +25,21 @@ export class FFmpeg {
      */
     #registerHandlers = () => {
         if (this.#worker) {
+            this.#worker.onerror = (e) => {
+                const errMsg = `[Worker Error] ${e.message} (${e.filename}:${e.lineno})`;
+                console.error(errMsg);
+                this.#logEventCallbacks.forEach((f) => f({ message: errMsg }));
+                for (const id of Object.keys(this.#rejects)) {
+                    this.#rejects[id](new Error(errMsg));
+                    delete this.#rejects[id];
+                    delete this.#resolves[id];
+                }
+            };
             this.#worker.onmessage = ({ data: { id, type, data }, }) => {
                 switch (type) {
                     case FFMessageType.LOAD:
                         this.loaded = true;
-                        this.#resolves[id](data);
+                        if (typeof this.#resolves[id] === 'function') this.#resolves[id](data);
                         break;
                     case FFMessageType.MOUNT:
                     case FFMessageType.UNMOUNT:
@@ -41,20 +51,22 @@ export class FFmpeg {
                     case FFMessageType.CREATE_DIR:
                     case FFMessageType.LIST_DIR:
                     case FFMessageType.DELETE_DIR:
-                        this.#resolves[id](data);
+                        if (typeof this.#resolves[id] === 'function') this.#resolves[id](data);
                         break;
                     case FFMessageType.LOG:
                         this.#logEventCallbacks.forEach((f) => f(data));
-                        break;
+                        return;
                     case FFMessageType.PROGRESS:
                         this.#progressEventCallbacks.forEach((f) => f(data));
-                        break;
+                        return;
                     case FFMessageType.ERROR:
-                        this.#rejects[id](data);
+                        if (typeof this.#rejects[id] === 'function') this.#rejects[id](data);
                         break;
                 }
-                delete this.#resolves[id];
-                delete this.#rejects[id];
+                if (id !== undefined) {
+                    delete this.#resolves[id];
+                    delete this.#rejects[id];
+                }
             };
         }
     };
