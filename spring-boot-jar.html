@@ -1,0 +1,2265 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JAR Bundle Visualizer - Spring Boot / Maven 体积分析器</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* 自包含基础样式与降级保障，确保完全断网环境下依然保持精致排版 */
+    :root {
+      --bg-primary: #0b0f19;
+      --bg-secondary: #111827;
+      --bg-tertiary: #1e293b;
+      --border-color: #334155;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --accent: #38bdf8;
+    }
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+    }
+    /* 自定义滚动条 */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(71, 85, 105, 0.8);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(148, 163, 184, 0.9);
+    }
+    .glass-panel {
+      background: rgba(17, 24, 39, 0.88);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(51, 65, 85, 0.7);
+    }
+    .treemap-tooltip {
+      pointer-events: none;
+      position: fixed;
+      z-index: 60;
+      transition: opacity 0.08s ease;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+    }
+    .drop-active {
+      border-color: #38bdf8 !important;
+      background: rgba(56, 189, 248, 0.08) !important;
+    }
+    @keyframes pulse-border {
+      0%, 100% { border-color: rgba(56, 189, 248, 0.5); }
+      50% { border-color: rgba(56, 189, 248, 1); }
+    }
+    .animate-pulse-border {
+      animation: pulse-border 2s infinite;
+    }
+
+    /* ==================== 浅色模式 (Light Mode) 主题样式 ==================== */
+    html.light {
+      --bg-primary: #f8fafc;
+      --bg-secondary: #ffffff;
+      --bg-tertiary: #f1f5f9;
+      --border-color: #cbd5e1;
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --accent: #0284c7;
+      color-scheme: light;
+    }
+    html.light body {
+      background-color: var(--bg-primary) !important;
+      color: var(--text-primary) !important;
+    }
+    html.light ::-webkit-scrollbar-track {
+      background: rgba(241, 245, 249, 0.9);
+    }
+    html.light ::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.7);
+    }
+    html.light ::-webkit-scrollbar-thumb:hover {
+      background: rgba(100, 116, 139, 0.9);
+    }
+    html.light .glass-panel {
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid rgba(203, 213, 225, 0.9);
+      box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08);
+    }
+    html.light .treemap-tooltip {
+      box-shadow: 0 20px 25px -5px rgba(15, 23, 42, 0.14), 0 8px 10px -6px rgba(15, 23, 42, 0.08);
+    }
+    html.light .bg-slate-950 { background-color: #f1f5f9 !important; }
+    html.light .bg-slate-950\/85 { background-color: rgba(248, 250, 252, 0.9) !important; }
+    html.light .bg-slate-950\/80 { background-color: rgba(241, 245, 249, 0.9) !important; }
+    html.light .bg-slate-900,
+    html.light .bg-slate-900\/95 { background-color: rgba(255, 255, 255, 0.96) !important; }
+    html.light .bg-slate-900\/60,
+    html.light .bg-slate-900\/50 { background-color: rgba(248, 250, 252, 0.9) !important; }
+    html.light .bg-slate-800,
+    html.light .bg-slate-800\/90,
+    html.light .bg-slate-800\/80,
+    html.light .bg-slate-800\/70,
+    html.light .bg-slate-800\/60 { background-color: #f1f5f9 !important; }
+    html.light .hover\:bg-slate-800:hover,
+    html.light .hover\:bg-slate-800\/70:hover,
+    html.light .hover\:bg-slate-700:hover { background-color: #e2e8f0 !important; }
+    html.light .border-slate-800,
+    html.light .border-slate-800\/80,
+    html.light .border-slate-700,
+    html.light .border-slate-700\/70,
+    html.light .border-slate-600\/80 { border-color: #cbd5e1 !important; }
+    html.light .divide-slate-800\/60 > :not([hidden]) ~ :not([hidden]) { border-color: #e2e8f0 !important; }
+    html.light .text-white,
+    html.light .text-slate-100 { color: #0f172a !important; }
+    html.light .text-slate-200,
+    html.light .text-slate-300 { color: #334155 !important; }
+    html.light .text-slate-400,
+    html.light .text-slate-500 { color: #64748b !important; }
+    html.light .hover\:text-white:hover,
+    html.light .hover\:text-slate-200:hover { color: #0f172a !important; }
+    html.light .text-sky-300,
+    html.light .text-sky-400,
+    html.light .group:hover .group-hover\:text-sky-300 { color: #0284c7 !important; }
+    html.light .text-emerald-300 { color: #047857 !important; }
+    html.light .text-indigo-300 { color: #4338ca !important; }
+    html.light .text-amber-300 { color: #b45309 !important; }
+    html.light .text-rose-300 { color: #be123c !important; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 flex flex-col h-screen w-screen overflow-hidden">
+
+  <!-- 全屏拖拽遮罩层 -->
+  <div id="globalDropOverlay" class="fixed inset-0 z-50 hidden bg-slate-950/85 backdrop-blur-md flex flex-col items-center justify-center p-8 border-4 border-dashed border-sky-400 m-4 rounded-2xl pointer-events-none">
+    <div class="w-20 h-20 rounded-2xl bg-sky-500/20 border border-sky-400/40 flex items-center justify-center mb-4">
+      <svg class="w-10 h-10 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+      </svg>
+    </div>
+    <h2 class="text-2xl font-bold text-white mb-2">释放鼠标即可本地解析 JAR / WAR / ZIP 包</h2>
+    <p class="text-slate-400 text-sm">100% 浏览器内存级二进制解析（支持穿透读取 BOOT-INF/lib 嵌套 JAR 内部类）</p>
+  </div>
+
+  <!-- 顶部导航与工具栏 -->
+  <header class="h-14 border-b border-slate-800 bg-slate-900/95 px-4 flex items-center justify-between gap-3 shrink-0 z-20">
+    <!-- 左侧 Logo 与当前文件名 -->
+    <div class="flex items-center gap-3 min-w-0">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-sky-500 flex items-center justify-center shadow-md shadow-sky-500/10 shrink-0">
+        <svg class="w-5 h-5 text-slate-950" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M3 3h8v10H3V3zm10 0h8v6h-8V3zM3 15h8v6H3v-6zm10-4h8v10h-8V11z"/>
+        </svg>
+      </div>
+      <div class="truncate">
+        <div class="flex items-center gap-2">
+          <h1 class="font-bold text-sm md:text-base tracking-tight text-white truncate">Spring Boot JAR Visualizer</h1>
+          <span id="jarTypeBadge" class="hidden px-2 py-0.5 text-[11px] font-medium rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">Spring Boot Fat JAR</span>
+        </div>
+        <p id="currentFileLabel" class="text-xs text-slate-400 truncate">本地离线分析 · 支持嵌套依赖包穿透下钻</p>
+      </div>
+    </div>
+
+    <!-- 中间控制栏：搜索、体积口径切换、层级深度 -->
+    <div class="flex items-center gap-2 md:gap-3 flex-1 max-w-2xl justify-center">
+      <!-- 实时搜索框 -->
+      <div class="relative flex-1 max-w-xs">
+        <svg class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+        <input
+          id="searchInput"
+          type="text"
+          placeholder="搜索依赖或类 (如 jackson, netty, poi, .so)..."
+          class="w-full bg-slate-800/90 border border-slate-700 focus:border-sky-400 rounded-lg pl-9 pr-7 py-1.5 text-xs text-slate-100 placeholder-slate-400 outline-none transition"
+        />
+        <button id="clearSearchBtn" class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs px-1" title="清空搜索">✕</button>
+      </div>
+
+      <!-- 统计口径切换：Compressed vs Uncompressed -->
+      <div class="hidden sm:flex bg-slate-800 p-0.5 rounded-lg border border-slate-700 text-xs shrink-0">
+        <button id="metricCompressedBtn" class="px-2.5 py-1 rounded-md font-medium bg-sky-500 text-slate-950 transition">
+          JAR 压缩体积
+        </button>
+        <button id="metricUncompressedBtn" class="px-2.5 py-1 rounded-md font-medium text-slate-300 hover:text-white transition">
+          解压实际体积
+        </button>
+      </div>
+
+      <!-- 嵌套显示深度控制 -->
+      <div class="hidden lg:flex items-center gap-1.5 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700 text-xs shrink-0" title="控制矩形树图同时渲染的嵌套层级深度">
+        <span class="text-slate-400">嵌套深度:</span>
+        <select id="depthSelect" class="bg-transparent text-sky-300 font-semibold outline-none cursor-pointer">
+          <option value="1" class="bg-slate-900">1 层 (扁平)</option>
+          <option value="2" class="bg-slate-900" selected>2 层 (推荐)</option>
+          <option value="3" class="bg-slate-900">3 层 (深度)</option>
+          <option value="4" class="bg-slate-900">4 层 (全透视)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 右侧操作按钮 -->
+    <div class="flex items-center gap-2 shrink-0">
+      <label for="jarFileInput" class="cursor-pointer px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-xs flex items-center gap-1.5 shadow-sm transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+        </svg>
+        <span>选择 JAR 包</span>
+      </label>
+      <input id="jarFileInput" type="file" accept=".jar,.war,.zip" class="hidden" />
+
+      <button id="loadDemoBtn" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium transition hidden sm:inline-flex items-center gap-1" title="加载内置模拟 Spring Boot 生产级项目">
+        <span>示例项目</span>
+      </button>
+
+      <button id="themeToggleBtn" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium transition inline-flex items-center gap-1.5" title="切换深色 / 浅色主题">
+        <svg id="themeIconSun" class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+        </svg>
+        <svg id="themeIconMoon" class="w-4 h-4 text-sky-600 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+        </svg>
+        <span id="themeToggleLabel" class="hidden md:inline">浅色</span>
+      </button>
+
+      <button id="toggleSidebarBtn" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white transition" title="折叠/展开侧边分析抽屉">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- 二级导航栏：面包屑路径 + 快捷返回 + 颜色图例 -->
+  <div class="h-10 border-b border-slate-800/80 bg-slate-900/60 px-4 flex items-center justify-between gap-2 text-xs shrink-0 z-10">
+    <div class="flex items-center gap-1.5 min-w-0 flex-1 overflow-x-auto no-scrollbar py-1">
+      <button id="zoomRootBtn" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center gap-1 shrink-0 disabled:opacity-40 disabled:pointer-events-none" title="回到顶层根节点 (快捷键: Home)">
+        <svg class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+        </svg>
+        <span>根目录</span>
+      </button>
+      <button id="zoomOutBtn" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center gap-1 shrink-0 disabled:opacity-40 disabled:pointer-events-none" title="返回上一级 (快捷键: 右键点击 / Backspace / Esc)">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+        </svg>
+        <span>上一级</span>
+      </button>
+      <span class="text-slate-600 mx-1">|</span>
+      <!-- 动态面包屑容器 -->
+      <nav id="breadcrumbNav" class="flex items-center gap-1 text-slate-300 truncate"></nav>
+    </div>
+
+    <!-- 右侧图例说明与交互提示 -->
+    <div class="hidden xl:flex items-center gap-4 text-[11px] text-slate-400 shrink-0">
+      <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-indigo-500 inline-block"></span>BOOT-INF/lib (第三方依赖)</span>
+      <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block"></span>BOOT-INF/classes (业务代码/资源)</span>
+      <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-amber-500 inline-block"></span>META-INF & Loader</span>
+      <span class="text-slate-500">| 左键点击下钻 · 右键返回上级 · 滚轮调节嵌套层级</span>
+    </div>
+  </div>
+
+  <!-- 主体工作区：左侧 Canvas 树图 + 右侧可折叠详情统计面板 -->
+  <div class="flex-1 flex min-h-0 relative overflow-hidden">
+
+    <!-- 树图画布容器 -->
+    <main id="canvasContainer" class="flex-1 relative bg-slate-950 overflow-hidden">
+      <canvas id="treemapCanvas" class="block w-full h-full cursor-pointer"></canvas>
+
+      <!-- 首次打开时的引导浮层（支持直接拖拽或点击体验示例） -->
+      <div id="welcomeBanner" class="absolute bottom-5 left-5 z-20 max-w-md glass-panel rounded-xl p-4 shadow-2xl border border-sky-500/30 animate-pulse-border">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex items-center gap-2.5">
+            <span class="px-2 py-0.5 text-[11px] font-semibold rounded bg-sky-500/20 text-sky-300 border border-sky-400/30">离线可用</span>
+            <h3 class="text-sm font-bold text-white">当前展示：Spring Boot 模拟生产包</h3>
+          </div>
+          <button id="dismissWelcomeBtn" class="text-slate-400 hover:text-white text-xs p-0.5" title="关闭提示">✕</button>
+        </div>
+        <p class="text-xs text-slate-300 mt-2 leading-relaxed">
+          您可以直接把本地 <code class="text-sky-300 bg-slate-800 px-1 py-0.5 rounded">target/*.jar</code> 文件<strong>拖拽到页面任意位置</strong>进行秒级解析。
+          支持直接点击 <code class="text-indigo-300">BOOT-INF/lib/*.jar</code> 穿透查看第三方依赖包内部的包路径与 <code class="text-emerald-300">.class</code> 占比！
+        </p>
+        <div class="mt-3 flex items-center gap-2">
+          <label for="jarFileInput" class="cursor-pointer px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-xs transition">
+            打开本地 .jar 文件
+          </label>
+          <button id="switchShadeDemoBtn" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs transition">
+            切换 Maven Shade 示例
+          </button>
+        </div>
+      </div>
+    </main>
+
+    <!-- 右侧可折叠统计与依赖分析抽屉 -->
+    <aside id="sidebarPanel" class="w-80 md:w-96 border-l border-slate-800 bg-slate-900/95 flex flex-col shrink-0 z-20 transition-all duration-200">
+      <!-- 顶部概览指标卡 -->
+      <div class="p-3.5 border-b border-slate-800 grid grid-cols-2 gap-2.5">
+        <div class="bg-slate-800/60 border border-slate-700/70 rounded-lg p-2.5">
+          <div class="text-[11px] text-slate-400 flex items-center justify-between">
+            <span>当前视图总大小</span>
+            <span id="statCompressionRatio" class="text-[10px] text-sky-400 font-mono">压缩率 --%</span>
+          </div>
+          <div id="statTotalSize" class="text-base font-bold text-white mt-0.5 font-mono">-- MB</div>
+          <div id="statOtherMetricSize" class="text-[11px] text-slate-400 font-mono truncate">解压后: -- MB</div>
+        </div>
+        <div class="bg-slate-800/60 border border-slate-700/70 rounded-lg p-2.5">
+          <div class="text-[11px] text-slate-400 flex items-center justify-between">
+            <span>包含条目统计</span>
+            <span id="statJarCountBadge" class="text-[10px] text-indigo-300 font-mono">0 个依赖包</span>
+          </div>
+          <div id="statEntryCount" class="text-base font-bold text-white mt-0.5 font-mono">--</div>
+          <div id="statClassCount" class="text-[11px] text-slate-400 font-mono truncate">含 -- 个 .class 文件</div>
+        </div>
+      </div>
+
+      <!-- 结构构成进度条 (第三方依赖 vs 业务代码 vs 其他) -->
+      <div class="px-3.5 py-2.5 border-b border-slate-800 bg-slate-900/50">
+        <div class="flex items-center justify-between text-[11px] text-slate-300 mb-1.5">
+          <span class="font-medium">JAR 体积构成分布</span>
+          <span id="compositionSummaryText" class="text-slate-400 font-mono text-[10px]">--</span>
+        </div>
+        <div class="w-full h-2.5 rounded-full bg-slate-800 overflow-hidden flex">
+          <div id="barLib" class="h-full bg-indigo-500 transition-all duration-300" style="width: 85%" title="第三方依赖 (BOOT-INF/lib)"></div>
+          <div id="barClasses" class="h-full bg-emerald-500 transition-all duration-300" style="width: 12%" title="业务代码与资源 (BOOT-INF/classes)"></div>
+          <div id="barMeta" class="h-full bg-amber-500 transition-all duration-300" style="width: 3%" title="META-INF 与 Loader"></div>
+        </div>
+        <div class="flex items-center justify-between text-[11px] text-slate-400 mt-1.5 font-mono">
+          <span id="labelLibPct" class="text-indigo-300">依赖: --%</span>
+          <span id="labelClassesPct" class="text-emerald-300">业务: --%</span>
+          <span id="labelMetaPct" class="text-amber-300">元数据: --%</span>
+        </div>
+      </div>
+
+      <!-- 侧边栏选项卡：Top 排行榜 / 瘦身诊断建议 / Maven 排除配置 -->
+      <div class="flex border-b border-slate-800 text-xs bg-slate-900">
+        <button data-tab="ranking" class="sidebar-tab flex-1 py-2.5 font-semibold text-sky-400 border-b-2 border-sky-400 transition">
+          体积排行 (<span id="rankingCountLabel">0</span>)
+        </button>
+        <button data-tab="diagnostics" class="sidebar-tab flex-1 py-2.5 font-medium text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition flex items-center justify-center gap-1">
+          <span>瘦身诊断</span>
+          <span id="diagBadge" class="px-1.5 py-0.2 text-[10px] rounded-full bg-amber-500/20 text-amber-300 font-mono">0</span>
+        </button>
+        <button data-tab="maven" class="sidebar-tab flex-1 py-2.5 font-medium text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition">
+          排除依赖 XML
+        </button>
+      </div>
+
+      <!-- 选项卡内容 1：体积排行榜列表 -->
+      <div id="tabContentRanking" class="flex-1 overflow-y-auto divide-y divide-slate-800/60"></div>
+
+      <!-- 选项卡内容 2：智能瘦身诊断建议 -->
+      <div id="tabContentDiagnostics" class="hidden flex-1 overflow-y-auto p-3.5 space-y-3"></div>
+
+      <!-- 选项卡内容 3：Maven <exclusion> 生成器与分层命令 -->
+      <div id="tabContentMaven" class="hidden flex-1 overflow-y-auto p-3.5 space-y-3 text-xs">
+        <div class="bg-slate-800/70 border border-slate-700 rounded-lg p-3">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="font-semibold text-white">Maven 依赖排除片段</span>
+            <button id="copyMavenXmlBtn" class="px-2 py-1 rounded bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 text-[11px] font-medium transition">
+              复制 XML
+            </button>
+          </div>
+          <p class="text-[11px] text-slate-400 mb-2">
+            在左侧树图或排行榜中点击任意 <code class="text-indigo-300">.jar</code> 依赖旁的「排除」按钮，即可生成对应的 <code class="text-sky-300">&lt;exclusion&gt;</code> 配置：
+          </p>
+          <pre id="mavenExclusionCode" class="bg-slate-950 border border-slate-800 rounded p-2.5 text-[11px] text-emerald-300 font-mono overflow-x-auto select-all">&lt;!-- 点击任意第三方依赖即可生成 --&gt;
+&lt;exclusions&gt;
+    &lt;exclusion&gt;
+        &lt;groupId&gt;org.bouncycastle&lt;/groupId&gt;
+        &lt;artifactId&gt;bcpkix-jdk18on&lt;/artifactId&gt;
+    &lt;/exclusion&gt;
+&lt;/exclusions&gt;</pre>
+        </div>
+
+        <div class="bg-slate-800/70 border border-slate-700 rounded-lg p-3">
+          <div class="font-semibold text-white mb-1.5">Spring Boot 分层镜像优化 (Layered JAR)</div>
+          <p class="text-[11px] text-slate-400 leading-relaxed mb-2">
+            当 <code class="text-indigo-300">BOOT-INF/lib</code> 占比较高但无法继续裁剪时，推荐在 <code class="text-slate-200">spring-boot-maven-plugin</code> 中开启分层打包，使 Docker 每次构建仅推送几百 KB 的业务代码层：
+          </p>
+          <pre class="bg-slate-950 border border-slate-800 rounded p-2.5 text-[11px] text-sky-300 font-mono overflow-x-auto select-all">&lt;plugin&gt;
+    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-boot-maven-plugin&lt;/artifactId&gt;
+    &lt;configuration&gt;
+        &lt;layers&gt;
+            &lt;enabled&gt;true&lt;/enabled&gt;
+        &lt;/layers&gt;
+    &lt;/configuration&gt;
+&lt;/plugin&gt;</pre>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- 悬浮详情卡片 (Tooltip) -->
+  <div id="treemapTooltip" class="treemap-tooltip hidden max-w-sm glass-panel rounded-xl p-3 text-xs border border-slate-600/80">
+    <div class="flex items-center justify-between gap-2 mb-1">
+      <span id="ttCategoryBadge" class="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">第三方依赖</span>
+      <span id="ttFileCount" class="text-[11px] text-slate-400 font-mono">128 个文件</span>
+    </div>
+    <div id="ttTitle" class="font-bold text-white text-sm break-all mb-1">poi-ooxml-full-5.2.5.jar</div>
+    <div id="ttPath" class="text-[11px] text-slate-400 font-mono break-all mb-2.5">BOOT-INF/lib/poi-ooxml-full-5.2.5.jar</div>
+
+    <div class="grid grid-cols-2 gap-2 bg-slate-950/80 rounded-lg p-2 border border-slate-800 font-mono">
+      <div>
+        <div class="text-[10px] text-slate-400">JAR 压缩后体积</div>
+        <div id="ttCompressed" class="text-xs font-bold text-sky-300">15.82 MB</div>
+      </div>
+      <div>
+        <div class="text-[10px] text-slate-400">解压后实际大小</div>
+        <div id="ttUncompressed" class="text-xs font-bold text-emerald-300">18.40 MB</div>
+      </div>
+      <div>
+        <div class="text-[10px] text-slate-400">占当前视图比例</div>
+        <div id="ttViewPct" class="text-xs font-semibold text-white">24.6%</div>
+      </div>
+      <div>
+        <div class="text-[10px] text-slate-400">占整包总比例</div>
+        <div id="ttTotalPct" class="text-xs font-semibold text-slate-300">18.3%</div>
+      </div>
+    </div>
+
+    <div id="ttHint" class="mt-2 text-[11px] text-sky-400 flex items-center justify-between">
+      <span>左键点击下钻查看内部结构</span>
+      <span class="text-slate-500">右键返回</span>
+    </div>
+  </div>
+
+  <!-- 轻提示 Toast -->
+  <div id="toastNotice" class="fixed bottom-5 right-5 z-50 hidden px-4 py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-semibold text-xs shadow-xl transition-all">
+    已复制到剪贴板
+  </div>
+
+  <script>
+    /**
+     * ============================================================================
+     * 1. 工具函数：格式化字节、颜色哈希与剪贴板
+     * ============================================================================
+     */
+    function formatBytes(bytes, decimals = 2) {
+      if (!bytes || bytes <= 0) return '0 B';
+      const k = 1024;
+      const dm = decimals < 0 ? 0 : decimals;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.min(sizes.length - 1, Math.floor(Math.log(bytes) / Math.log(k)));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById('toastNotice');
+      toast.textContent = message;
+      toast.classList.remove('hidden');
+      clearTimeout( showToast._timer );
+      showToast._timer = setTimeout(() => {
+        toast.classList.add('hidden');
+      }, 2400);
+    }
+
+    function copyTextToClipboard(text) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        showToast('已复制 Maven 配置片段到剪贴板');
+      } catch (err) {
+        showToast('复制失败，请手动选中复制');
+      }
+      document.body.removeChild(textarea);
+    }
+
+    /**
+     * 根据节点所属分类与名称生成极具辨识度的 Vite Visualizer 风格色彩
+     */
+    function getNodeColorPalette(node, depth = 0, isHighlighted = false, isDimmed = false) {
+      // 确定根分类色相
+      let baseHue = 215;
+      let baseSat = 68;
+      let baseLight = 36;
+
+      const path = node.path || '';
+      if (path.startsWith('BOOT-INF/lib') || path.startsWith('WEB-INF/lib') || node.category === 'lib') {
+        // 为不同依赖包分配稳定且柔和的渐变色相 (蓝紫 ~ 青蓝 ~ 紫红)
+        let hash = 0;
+        const jarKey = node.jarName || node.name || '';
+        for (let i = 0; i < jarKey.length; i++) {
+          hash = jarKey.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const hues = [225, 242, 260, 205, 192, 275, 215, 250];
+        baseHue = hues[Math.abs(hash) % hues.length];
+        baseSat = 62;
+        baseLight = 34;
+      } else if (path.startsWith('BOOT-INF/classes') || path.startsWith('WEB-INF/classes') || node.category === 'classes') {
+        baseHue = 156; // 翡翠绿代表自己的业务代码与配置
+        baseSat = 64;
+        baseLight = 32;
+      } else if (path.startsWith('META-INF') || path.startsWith('org/springframework/boot/loader') || node.category === 'meta') {
+        baseHue = 36; // 琥珀金代表 META-INF 和 Spring Boot Loader
+        baseSat = 72;
+        baseLight = 34;
+      } else {
+        // 普通 JAR / Shade Uber-JAR 根据顶级包名哈希着色
+        let hash = 0;
+        const topKey = path.split('/')[0] || node.name;
+        for (let i = 0; i < topKey.length; i++) {
+          hash = topKey.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        baseHue = (Math.abs(hash) % 260) + 15;
+        baseSat = 58;
+        baseLight = 34;
+      }
+
+      const isLight = state.theme === 'light';
+
+      if (isHighlighted) {
+        return {
+          fill: `hsl(46, 95%, 52%)`,
+          headerFill: `hsl(42, 95%, 42%)`,
+          stroke: isLight ? `#ca8a04` : `#fef08a`,
+          text: `#0f172a`
+        };
+      }
+
+      if (isDimmed) {
+        if (isLight) {
+          return {
+            fill: `hsla(${baseHue}, 16%, 88%, 0.75)`,
+            headerFill: `hsla(${baseHue}, 16%, 82%, 0.75)`,
+            stroke: `rgba(148, 163, 184, 0.45)`,
+            text: `rgba(100, 116, 139, 0.5)`
+          };
+        }
+        return {
+          fill: `hsla(${baseHue}, 18%, 16%, 0.65)`,
+          headerFill: `hsla(${baseHue}, 18%, 13%, 0.65)`,
+          stroke: `rgba(51, 65, 85, 0.4)`,
+          text: `rgba(148, 163, 184, 0.4)`
+        };
+      }
+
+      if (isLight) {
+        const lightL = Math.max(62, 82 - depth * 4);
+        const lightSat = Math.min(82, baseSat + 6);
+        return {
+          fill: `hsl(${baseHue}, ${lightSat}%, ${lightL}%)`,
+          headerFill: `hsl(${baseHue}, ${lightSat}%, ${Math.max(52, lightL - 8)}%)`,
+          stroke: `hsl(${baseHue}, ${Math.max(40, lightSat - 10)}%, ${Math.max(42, lightL - 20)}%)`,
+          text: `#0f172a`
+        };
+      }
+
+      // 随嵌套深度微调明度，营造立体包裹感
+      const light = Math.min(54, baseLight + depth * 4);
+
+      return {
+        fill: `hsl(${baseHue}, ${baseSat}%, ${light}%)`,
+        headerFill: `hsl(${baseHue}, ${baseSat}%, ${Math.max(20, light - 7)}%)`,
+        stroke: `hsl(${baseHue}, ${Math.max(30, baseSat - 15)}%, ${Math.min(72, light + 16)}%)`,
+        text: `#f8fafc`
+      };
+    }
+
+    /**
+     * ============================================================================
+     * 2. 纯前端零依赖 ZIP / JAR 二进制解析引擎 (支持穿透解析 STORED 嵌套 JAR)
+     * ============================================================================
+     */
+    const utf8Decoder = new TextDecoder('utf-8');
+
+    /**
+     * 在指定字节区间 [byteOffset, byteOffset + byteLength) 中解析 ZIP Central Directory
+     * 无需解压流，百兆 Fat JAR 仅需 10~30ms 即可完成解析
+     */
+    function parseZipCentralDirectory(arrayBuffer, byteOffset = 0, byteLength = arrayBuffer.byteLength) {
+      const view = new DataView(arrayBuffer, byteOffset, byteLength);
+      const maxSearchComment = Math.min(byteLength, 65557);
+      let eocdPos = -1;
+
+      // 从尾部向前扫描 End of Central Directory (0x06054b50)
+      for (let i = byteLength - 22; i >= byteLength - maxSearchComment; i--) {
+        if (view.getUint32(i, true) === 0x06054b50) {
+          eocdPos = i;
+          break;
+        }
+      }
+
+      if (eocdPos === -1) {
+        throw new Error('未找到有效的 ZIP/JAR 中央目录签名 (0x06054b50)，请确认文件是否为合法的 .jar/.war/.zip 归档');
+      }
+
+      let totalEntries = view.getUint16(eocdPos + 10, true);
+      let cdSize = view.getUint32(eocdPos + 12, true);
+      let cdOffset = view.getUint32(eocdPos + 16, true);
+
+      // 兼容 ZIP64 End of Central Directory Locator (0x07064b50)
+      if ((cdOffset === 0xFFFFFFFF || totalEntries === 0xFFFF) && eocdPos >= 20) {
+        const locatorPos = eocdPos - 20;
+        if (view.getUint32(locatorPos, true) === 0x07064b50) {
+          const zip64EocdOffset = Number(view.getBigUint64(locatorPos + 8, true));
+          if (zip64EocdOffset + 56 <= byteLength && view.getUint32(zip64EocdOffset, true) === 0x06064b50) {
+            totalEntries = Number(view.getBigUint64(zip64EocdOffset + 32, true));
+            cdSize = Number(view.getBigUint64(zip64EocdOffset + 40, true));
+            cdOffset = Number(view.getBigUint64(zip64EocdOffset + 48, true));
+          }
+        }
+      }
+
+      const entries = [];
+      let ptr = cdOffset;
+      const cdEnd = Math.min(byteLength, cdOffset + cdSize);
+
+      while (ptr + 46 <= cdEnd) {
+        const sig = view.getUint32(ptr, true);
+        if (sig !== 0x02014b50) break;
+
+        const compressionMethod = view.getUint16(ptr + 10, true);
+        let compressedSize = view.getUint32(ptr + 20, true);
+        let uncompressedSize = view.getUint32(ptr + 24, true);
+        const fileNameLen = view.getUint16(ptr + 28, true);
+        const extraLen = view.getUint16(ptr + 30, true);
+        const commentLen = view.getUint16(ptr + 32, true);
+        let localHeaderOffset = view.getUint32(ptr + 42, true);
+
+        const nameBytes = new Uint8Array(arrayBuffer, byteOffset + ptr + 46, fileNameLen);
+        const fileName = utf8Decoder.decode(nameBytes);
+
+        // 处理 ZIP64 扩展字段 (0x0001)
+        if (compressedSize === 0xFFFFFFFF || uncompressedSize === 0xFFFFFFFF || localHeaderOffset === 0xFFFFFFFF) {
+          let extraPtr = ptr + 46 + fileNameLen;
+          const extraEnd = extraPtr + extraLen;
+          while (extraPtr + 4 <= extraEnd) {
+            const headerId = view.getUint16(extraPtr, true);
+            const dataSize = view.getUint16(extraPtr + 2, true);
+            if (headerId === 0x0001) {
+              let zPtr = extraPtr + 4;
+              if (uncompressedSize === 0xFFFFFFFF && zPtr + 8 <= extraEnd) {
+                uncompressedSize = Number(view.getBigUint64(zPtr, true));
+                zPtr += 8;
+              }
+              if (compressedSize === 0xFFFFFFFF && zPtr + 8 <= extraEnd) {
+                compressedSize = Number(view.getBigUint64(zPtr, true));
+                zPtr += 8;
+              }
+              if (localHeaderOffset === 0xFFFFFFFF && zPtr + 8 <= extraEnd) {
+                localHeaderOffset = Number(view.getBigUint64(zPtr, true));
+              }
+              break;
+            }
+            extraPtr += 4 + dataSize;
+          }
+        }
+
+        if (!fileName.endsWith('/')) {
+          entries.push({
+            fileName,
+            compressionMethod,
+            compressedSize,
+            uncompressedSize,
+            localHeaderOffset
+          });
+        }
+
+        ptr += 46 + fileNameLen + extraLen + commentLen;
+      }
+
+      return entries;
+    }
+
+    /**
+     * 计算嵌套 STORED 条目在父 ZIP 中的真实数据起始偏移量（跳过 Local File Header 0x04034b50）
+     */
+    function getStoredEntryDataOffset(arrayBuffer, baseOffset, entry) {
+      const view = new DataView(arrayBuffer, baseOffset);
+      const lhOffset = entry.localHeaderOffset;
+      if (lhOffset + 30 > view.byteLength) return -1;
+      const sig = view.getUint32(lhOffset, true);
+      if (sig !== 0x04034b50) return -1;
+      const fileNameLen = view.getUint16(lhOffset + 26, true);
+      const extraLen = view.getUint16(lhOffset + 28, true);
+      return baseOffset + lhOffset + 30 + fileNameLen + extraLen;
+    }
+
+    /**
+     * 将解析出的条目构建为嵌套树结构，并支持穿透解析 BOOT-INF/lib/*.jar 内部结构
+     */
+    function buildJarHierarchy(fileName, arrayBuffer) {
+      const rawEntries = parseZipCentralDirectory(arrayBuffer, 0, arrayBuffer.byteLength);
+
+      let isSpringBootJar = false;
+      let isWar = fileName.toLowerCase().endsWith('.war');
+      let hasMavenPomProps = false;
+
+      for (const e of rawEntries) {
+        if (e.fileName.startsWith('BOOT-INF/')) isSpringBootJar = true;
+        if (e.fileName.startsWith('WEB-INF/')) isWar = true;
+        if (e.fileName.startsWith('META-INF/maven/')) hasMavenPomProps = true;
+      }
+
+      const root = {
+        name: fileName,
+        path: '',
+        compressed: 0,
+        uncompressed: 0,
+        fileCount: 0,
+        classCount: 0,
+        jarCount: 0,
+        childrenMap: new Map(),
+        children: [],
+        jarType: isSpringBootJar ? 'Spring Boot Fat JAR' : (isWar ? 'Java Web WAR' : (hasMavenPomProps ? 'Maven Shade / Standard JAR' : 'Java JAR Archive'))
+      };
+
+      // 辅助函数：向树中插入路径节点
+      function insertFileNode(segments, compSize, uncompSize, extraMeta = {}) {
+        let curr = root;
+        curr.compressed += compSize;
+        curr.uncompressed += uncompSize;
+        curr.fileCount += 1;
+        if (extraMeta.isClass) curr.classCount += 1;
+
+        let currentPath = '';
+        for (let i = 0; i < segments.length; i++) {
+          const seg = segments[i];
+          if (!seg) continue;
+          currentPath = currentPath ? `${currentPath}/${seg}` : seg;
+          const isLeaf = i === segments.length - 1;
+
+          let child = curr.childrenMap.get(seg);
+          if (!child) {
+            child = {
+              name: seg,
+              path: currentPath,
+              compressed: 0,
+              uncompressed: 0,
+              fileCount: 0,
+              classCount: 0,
+              category: extraMeta.category || inferCategory(currentPath),
+              jarName: extraMeta.jarName || (seg.endsWith('.jar') ? seg : curr.jarName),
+              mavenCoord: extraMeta.mavenCoord || curr.mavenCoord || null,
+              isNestedJar: extraMeta.isNestedJar && isLeaf ? true : false,
+              childrenMap: isLeaf ? null : new Map(),
+              children: []
+            };
+            curr.childrenMap.set(seg, child);
+          }
+
+          child.compressed += compSize;
+          child.uncompressed += uncompSize;
+          child.fileCount += 1;
+          if (extraMeta.isClass) child.classCount += 1;
+          if (extraMeta.mavenCoord && !child.mavenCoord) {
+            child.mavenCoord = extraMeta.mavenCoord;
+          }
+
+          if (!isLeaf && !child.childrenMap) {
+            child.childrenMap = new Map();
+          }
+          curr = child;
+        }
+      }
+
+      function inferCategory(path) {
+        if (path.startsWith('BOOT-INF/lib') || path.startsWith('WEB-INF/lib')) return 'lib';
+        if (path.startsWith('BOOT-INF/classes') || path.startsWith('WEB-INF/classes')) return 'classes';
+        if (path.startsWith('META-INF') || path.startsWith('org/springframework/boot/loader')) return 'meta';
+        return 'classes';
+      }
+
+      // 遍历顶层条目
+      for (const entry of rawEntries) {
+        const path = entry.fileName;
+        const isNestedLibJar = (path.startsWith('BOOT-INF/lib/') || path.startsWith('WEB-INF/lib/')) && path.endsWith('.jar');
+
+        // 如果是 Spring Boot STORED 方式存储的嵌套依赖 JAR，直接穿透读取该 JAR 的内部中央目录！
+        if (isNestedLibJar && entry.compressionMethod === 0 && entry.compressedSize > 22) {
+          root.jarCount += 1;
+          const jarFileName = path.split('/').pop();
+          const mavenCoord = guessMavenCoordinateFromJarName(jarFileName);
+
+          let nestedParsed = false;
+          try {
+            const nestedStart = getStoredEntryDataOffset(arrayBuffer, 0, entry);
+            if (nestedStart > 0 && nestedStart + entry.compressedSize <= arrayBuffer.byteLength) {
+              const innerEntries = parseZipCentralDirectory(arrayBuffer, nestedStart, entry.compressedSize);
+              if (innerEntries.length > 0) {
+                nestedParsed = true;
+                // 识别 META-INF/maven/{groupId}/{artifactId}/pom.properties
+                let detectedCoord = mavenCoord;
+                for (const ie of innerEntries) {
+                  if (ie.fileName.startsWith('META-INF/maven/') && ie.fileName.endsWith('/pom.properties')) {
+                    const parts = ie.fileName.split('/');
+                    if (parts.length >= 5) {
+                      detectedCoord = { groupId: parts[2], artifactId: parts[3], version: mavenCoord.version };
+                      break;
+                    }
+                  }
+                }
+
+                // 计算内部条目压缩后大小之和与外层 STORED 大小的差额（ZIP Header 开销），确保总体积严格对齐
+                let innerCompSum = 0;
+                for (const ie of innerEntries) innerCompSum += ie.compressedSize;
+                const scaleFactor = innerCompSum > 0 ? (entry.compressedSize / innerCompSum) : 1;
+
+                const prefixSegments = path.split('/'); // ['BOOT-INF', 'lib', 'xxx.jar']
+                for (const ie of innerEntries) {
+                  const innerSegs = ie.fileName.split('/').filter(Boolean);
+                  const fullSegs = prefixSegments.concat(innerSegs);
+                  const adjustedComp = Math.round(ie.compressedSize * scaleFactor);
+                  insertFileNode(fullSegs, adjustedComp, ie.uncompressedSize, {
+                    category: 'lib',
+                    jarName: jarFileName,
+                    mavenCoord: detectedCoord,
+                    isClass: ie.fileName.endsWith('.class')
+                  });
+                }
+              }
+            }
+          } catch (nestedErr) {
+            // 如果个别嵌套 JAR 非标准格式，降级为单节点展示
+            nestedParsed = false;
+          }
+
+          if (!nestedParsed) {
+            insertFileNode(path.split('/'), entry.compressedSize, entry.uncompressedSize, {
+              category: 'lib',
+              jarName: jarFileName,
+              mavenCoord,
+              isNestedJar: true
+            });
+          }
+        } else {
+          if (isNestedLibJar) root.jarCount += 1;
+          const jarFileName = isNestedLibJar ? path.split('/').pop() : null;
+          insertFileNode(path.split('/'), entry.compressedSize, entry.uncompressedSize, {
+            category: inferCategory(path),
+            jarName: jarFileName,
+            mavenCoord: jarFileName ? guessMavenCoordinateFromJarName(jarFileName) : null,
+            isClass: path.endsWith('.class')
+          });
+        }
+      }
+
+      finalizeTree(root);
+      return root;
+    }
+
+    /**
+     * 将 childrenMap 递归转换为按体积降序排列的数组，并合并单子节点长路径（如 com/example/project）以提升可读性
+     */
+    function finalizeTree(node) {
+      if (!node.childrenMap || node.childrenMap.size === 0) {
+        node.children = [];
+        delete node.childrenMap;
+        return;
+      }
+
+      const arr = Array.from(node.childrenMap.values());
+      delete node.childrenMap;
+
+      for (const child of arr) {
+        finalizeTree(child);
+        // 自动折叠只有一个子目录且非顶层结构目录的包路径 (例如 org -> springframework -> boot 折叠为 org.springframework.boot)
+        while (
+          child.children &&
+          child.children.length === 1 &&
+          child.children[0].children &&
+          child.children[0].children.length > 0 &&
+          !child.name.endsWith('.jar') &&
+          child.name !== 'BOOT-INF' &&
+          child.name !== 'WEB-INF' &&
+          child.name !== 'lib' &&
+          child.name !== 'classes' &&
+          child.name !== 'META-INF'
+        ) {
+          const grandChild = child.children[0];
+          child.name = `${child.name}/${grandChild.name}`;
+          child.path = grandChild.path;
+          child.children = grandChild.children;
+        }
+      }
+
+      arr.sort((a, b) => b.compressed - a.compressed);
+      node.children = arr;
+    }
+
+    /**
+     * 从常见 JAR 文件名推断 Maven groupId 与 artifactId
+     */
+    function guessMavenCoordinateFromJarName(jarFileName) {
+      const base = jarFileName.replace(/\.jar$/i, '');
+      const match = base.match(/^([a-zA-Z0-9._-]+?)-(\d+\.\d+.*)$/);
+      const artifactId = match ? match[1] : base;
+      const version = match ? match[2] : '';
+
+      const knownGroupMap = {
+        'spring-boot': 'org.springframework.boot',
+        'spring-': 'org.springframework',
+        'jackson-': 'com.fasterxml.jackson.core',
+        'netty-': 'io.netty',
+        'poi': 'org.apache.poi',
+        'guava': 'com.google.guava',
+        'lombok': 'org.projectlombok',
+        'bcprov': 'org.bouncycastle',
+        'bcpkix': 'org.bouncycastle',
+        'hutool': 'cn.hutool',
+        'mybatis': 'org.mybatis',
+        'mysql-connector': 'com.mysql',
+        'postgresql': 'org.postgresql',
+        'redisson': 'org.redisson',
+        'fastjson': 'com.alibaba.fastjson2',
+        'druid': 'com.alibaba',
+        'logback': 'ch.qos.logback',
+        'slf4j': 'org.slf4j',
+        'commons-': 'org.apache.commons',
+        'httpclient': 'org.apache.httpcomponents.client5',
+        'kafka-clients': 'org.apache.kafka',
+        'hibernate-': 'org.hibernate.orm'
+      };
+
+      let groupId = 'com.example.dependency';
+      for (const [prefix, grp] of Object.entries(knownGroupMap)) {
+        if (artifactId.startsWith(prefix)) {
+          groupId = grp;
+          break;
+        }
+      }
+
+      return { groupId, artifactId, version };
+    }
+
+    /**
+     * ============================================================================
+     * 3. 内置模拟数据集生成器（支持 Spring Boot 胖包示例 & Maven Shade 示例）
+     * ============================================================================
+     */
+    function createMockSpringBootJar() {
+      const mockSpec = [
+        // BOOT-INF/lib 第三方依赖（包含内部包结构，支持点击继续下钻！）
+        {
+          jar: 'poi-ooxml-full-5.2.5.jar',
+          groupId: 'org.apache.poi',
+          artifactId: 'poi-ooxml-full',
+          packages: [
+            ['org/openxmlformats/schemas/spreadsheetml/x2006/main', 7420 * 1024, 9800 * 1024, 1420],
+            ['org/openxmlformats/schemas/wordprocessingml/x2006/main', 4610 * 1024, 6200 * 1024, 910],
+            ['org/openxmlformats/schemas/drawingml/x2006/main', 2980 * 1024, 4100 * 1024, 640],
+            ['schemaorg_apache_xmlbeans/system/sXMLSCHEMA', 1850 * 1024, 2100 * 1024, 380]
+          ]
+        },
+        {
+          jar: 'netty-all-4.1.107.Final.jar',
+          groupId: 'io.netty',
+          artifactId: 'netty-all',
+          packages: [
+            ['io/netty/handler/codec/http2', 1420 * 1024, 1890 * 1024, 210],
+            ['io/netty/channel/epoll', 980 * 1024, 1340 * 1024, 115],
+            ['io/netty/buffer', 860 * 1024, 1150 * 1024, 98],
+            ['META-INF/native/libnetty_tcnative_linux_x86_64.so', 2640 * 1024, 2890 * 1024, 1],
+            ['META-INF/native/libnetty_tcnative_osx_aarch_64.jnilib', 1920 * 1024, 2150 * 1024, 1],
+            ['META-INF/native/netty_tcnative_windows_x86_64.dll', 2180 * 1024, 2420 * 1024, 1]
+          ]
+        },
+        {
+          jar: 'bcprov-jdk18on-1.77.jar',
+          groupId: 'org.bouncycastle',
+          artifactId: 'bcprov-jdk18on',
+          packages: [
+            ['org/bouncycastle/crypto/engines', 2350 * 1024, 3120 * 1024, 320],
+            ['org/bouncycastle/asn1', 1680 * 1024, 2240 * 1024, 290],
+            ['org/bouncycastle/pqc/crypto', 1940 * 1024, 2580 * 1024, 260],
+            ['org/bouncycastle/jcajce/provider', 1420 * 1024, 1950 * 1024, 210]
+          ]
+        },
+        {
+          jar: 'guava-33.0.0-jre.jar',
+          groupId: 'com.google.guava',
+          artifactId: 'guava',
+          packages: [
+            ['com/google/common/collect', 1620 * 1024, 2180 * 1024, 340],
+            ['com/google/common/util/concurrent', 680 * 1024, 920 * 1024, 140],
+            ['com/google/common/cache', 420 * 1024, 590 * 1024, 85],
+            ['com/google/common/hash', 360 * 1024, 490 * 1024, 72]
+          ]
+        },
+        {
+          jar: 'hutool-all-5.8.26.jar',
+          groupId: 'cn.hutool',
+          artifactId: 'hutool-all',
+          packages: [
+            ['cn/hutool/core', 1480 * 1024, 1980 * 1024, 410],
+            ['cn/hutool/http', 620 * 1024, 840 * 1024, 95],
+            ['cn/hutool/poi/excel', 540 * 1024, 730 * 1024, 88],
+            ['cn/hutool/crypto', 490 * 1024, 660 * 1024, 76]
+          ]
+        },
+        {
+          jar: 'jackson-databind-2.16.1.jar',
+          groupId: 'com.fasterxml.jackson.core',
+          artifactId: 'jackson-databind',
+          packages: [
+            ['com/fasterxml/jackson/databind/deser', 680 * 1024, 940 * 1024, 132],
+            ['com/fasterxml/jackson/databind/ser', 590 * 1024, 810 * 1024, 118],
+            ['com/fasterxml/jackson/databind/introspect', 380 * 1024, 520 * 1024, 65]
+          ]
+        },
+        {
+          jar: 'spring-webmvc-6.1.4.jar',
+          groupId: 'org.springframework',
+          artifactId: 'spring-webmvc',
+          packages: [
+            ['org/springframework/web/servlet/mvc/method', 620 * 1024, 860 * 1024, 114],
+            ['org/springframework/web/servlet/view', 430 * 1024, 590 * 1024, 82]
+          ]
+        },
+        {
+          jar: 'spring-core-6.1.4.jar',
+          groupId: 'org.springframework',
+          artifactId: 'spring-core',
+          packages: [
+            ['org/springframework/core/io', 580 * 1024, 790 * 1024, 96],
+            ['org/springframework/cglib', 740 * 1024, 1020 * 1024, 145],
+            ['org/springframework/asm', 410 * 1024, 540 * 1024, 48]
+          ]
+        },
+        {
+          jar: 'mysql-connector-j-8.3.0.jar',
+          groupId: 'com.mysql',
+          artifactId: 'mysql-connector-j',
+          packages: [
+            ['com/mysql/cj/jdbc', 1240 * 1024, 1680 * 1024, 175],
+            ['com/mysql/cj/protocol/x', 960 * 1024, 1320 * 1024, 160]
+          ]
+        },
+        {
+          jar: 'redisson-3.27.0.jar',
+          groupId: 'org.redisson',
+          artifactId: 'redisson',
+          packages: [
+            ['org/redisson/command', 920 * 1024, 1280 * 1024, 210],
+            ['org/redisson/client/protocol', 840 * 1024, 1160 * 1024, 185]
+          ]
+        },
+        {
+          jar: 'lombok-1.18.30.jar',
+          groupId: 'org.projectlombok',
+          artifactId: 'lombok',
+          packages: [
+            ['lombok/javac/handlers', 1120 * 1024, 1490 * 1024, 160],
+            ['lombok/eclipse/handlers', 890 * 1024, 1180 * 1024, 142]
+          ]
+        },
+        {
+          jar: 'mybatis-plus-core-3.5.5.jar',
+          groupId: 'com.baomidou',
+          artifactId: 'mybatis-plus-core',
+          packages: [
+            ['com/baomidou/mybatisplus/core/conditions', 540 * 1024, 760 * 1024, 92],
+            ['com/baomidou/mybatisplus/core/metadata', 420 * 1024, 580 * 1024, 64]
+          ]
+        }
+      ];
+
+      // 业务代码与资源文件 (BOOT-INF/classes)
+      const classesSpec = [
+        ['BOOT-INF/classes/com/acme/mall/order/service/impl/OrderFulfillmentServiceImpl.class', 98 * 1024, 215 * 1024, true],
+        ['BOOT-INF/classes/com/acme/mall/order/service/impl/OrderSettlementEngine.class', 84 * 1024, 192 * 1024, true],
+        ['BOOT-INF/classes/com/acme/mall/order/controller/OrderAdminController.class', 62 * 1024, 140 * 1024, true],
+        ['BOOT-INF/classes/com/acme/mall/product/service/CatalogSyncService.class', 115 * 1024, 260 * 1024, true],
+        ['BOOT-INF/classes/com/acme/mall/payment/wechat/WechatPayV3Client.class', 92 * 1024, 210 * 1024, true],
+        ['BOOT-INF/classes/com/acme/mall/report/excel/PoiReportGenerator.class', 76 * 1024, 178 * 1024, true],
+        ['BOOT-INF/classes/mapper/order/OrderMasterMapper.xml', 145 * 1024, 420 * 1024, false],
+        ['BOOT-INF/classes/mapper/product/ProductSkuMapper.xml', 112 * 1024, 340 * 1024, false],
+        ['BOOT-INF/classes/static/fonts/AlibabaPuHuiTi-Regular.ttf', 3450 * 1024, 4120 * 1024, false],
+        ['BOOT-INF/classes/static/assets/admin-dashboard-bundle.js', 1280 * 1024, 3680 * 1024, false],
+        ['BOOT-INF/classes/templates/pdf/invoice_template.pdf', 890 * 1024, 950 * 1024, false],
+        ['BOOT-INF/classes/application-prod.yml', 28 * 1024, 84 * 1024, false]
+      ];
+
+      // Spring Boot Loader 与 META-INF
+      const metaSpec = [
+        ['org/springframework/boot/loader/launch/JarLauncher.class', 185 * 1024, 340 * 1024, true],
+        ['org/springframework/boot/loader/zip/ZipContent.class', 240 * 1024, 460 * 1024, true],
+        ['META-INF/MANIFEST.MF', 12 * 1024, 36 * 1024, false],
+        ['META-INF/spring-configuration-metadata.json', 96 * 1024, 310 * 1024, false]
+      ];
+
+      const root = {
+        name: 'acme-mall-service-3.2.4-SNAPSHOT.jar (示例)',
+        path: '',
+        compressed: 0,
+        uncompressed: 0,
+        fileCount: 0,
+        classCount: 0,
+        jarCount: mockSpec.length,
+        childrenMap: new Map(),
+        children: [],
+        jarType: 'Spring Boot Fat JAR'
+      };
+
+      function addPath(segments, comp, uncomp, fileCnt, classCnt, cat, jarName, mavenCoord) {
+        let curr = root;
+        curr.compressed += comp;
+        curr.uncompressed += uncomp;
+        curr.fileCount += fileCnt;
+        curr.classCount += classCnt;
+
+        let currentPath = '';
+        for (let i = 0; i < segments.length; i++) {
+          const seg = segments[i];
+          currentPath = currentPath ? `${currentPath}/${seg}` : seg;
+          const isLeaf = i === segments.length - 1;
+          let child = curr.childrenMap.get(seg);
+          if (!child) {
+            child = {
+              name: seg,
+              path: currentPath,
+              compressed: 0,
+              uncompressed: 0,
+              fileCount: 0,
+              classCount: 0,
+              category: cat,
+              jarName: jarName || (seg.endsWith('.jar') ? seg : curr.jarName),
+              mavenCoord: mavenCoord || curr.mavenCoord,
+              childrenMap: isLeaf ? null : new Map(),
+              children: []
+            };
+            curr.childrenMap.set(seg, child);
+          }
+          child.compressed += comp;
+          child.uncompressed += uncomp;
+          child.fileCount += fileCnt;
+          child.classCount += classCnt;
+          if (!isLeaf && !child.childrenMap) child.childrenMap = new Map();
+          curr = child;
+        }
+      }
+
+      for (const lib of mockSpec) {
+        const coord = { groupId: lib.groupId, artifactId: lib.artifactId };
+        for (const [pkgPath, comp, uncomp, clsCount] of lib.packages) {
+          const segs = ['BOOT-INF', 'lib', lib.jar, ...pkgPath.split('/')];
+          addPath(segs, comp, uncomp, clsCount, pkgPath.endsWith('.so') || pkgPath.endsWith('.dll') || pkgPath.endsWith('.jnilib') ? 0 : clsCount, 'lib', lib.jar, coord);
+        }
+      }
+
+      for (const [path, comp, uncomp, isCls] of classesSpec) {
+        addPath(path.split('/'), comp, uncomp, 1, isCls ? 1 : 0, 'classes', null, null);
+      }
+
+      for (const [path, comp, uncomp, isCls] of metaSpec) {
+        addPath(path.split('/'), comp, uncomp, 1, isCls ? 1 : 0, 'meta', null, null);
+      }
+
+      finalizeTree(root);
+      return root;
+    }
+
+    function createMockShadeJar() {
+      const shadeSpec = [
+        ['com/acme/analytics/flink/job/RealtimeOrderStreamingJob.class', 420 * 1024, 980 * 1024, 24, 'classes'],
+        ['com/acme/analytics/flink/sink/ClickHouseBatchSink.class', 310 * 1024, 740 * 1024, 18, 'classes'],
+        ['org/apache/kafka/clients/producer/internals', 2840 * 1024, 5920 * 1024, 340, 'lib'],
+        ['org/apache/kafka/common/requests', 2190 * 1024, 4680 * 1024, 280, 'lib'],
+        ['com/clickhouse/client/http', 1640 * 1024, 3520 * 1024, 190, 'lib'],
+        ['com/fasterxml/jackson/databind', 1520 * 1024, 3290 * 1024, 260, 'lib'],
+        ['org/rocksdb/NativeLibraryLoader.class', 820 * 1024, 1780 * 1024, 125, 'lib'],
+        ['librocksdbjni-linux64.so', 6840 * 1024, 7120 * 1024, 1, 'lib'],
+        ['librocksdbjni-osx-arm64.jnilib', 5420 * 1024, 5810 * 1024, 1, 'lib'],
+        ['META-INF/services/org.apache.flink.table.factories.Factory', 45 * 1024, 120 * 1024, 1, 'meta']
+      ];
+
+      const root = {
+        name: 'realtime-analytics-shaded-1.0.0.jar (Maven Shade 示例)',
+        path: '',
+        compressed: 0,
+        uncompressed: 0,
+        fileCount: 0,
+        classCount: 0,
+        jarCount: 0,
+        childrenMap: new Map(),
+        children: [],
+        jarType: 'Maven Shade Uber-JAR'
+      };
+
+      for (const [path, comp, uncomp, cnt, cat] of shadeSpec) {
+        const segs = path.split('/');
+        let curr = root;
+        curr.compressed += comp;
+        curr.uncompressed += uncomp;
+        curr.fileCount += cnt;
+        if (!path.endsWith('.so') && !path.endsWith('.jnilib')) curr.classCount += cnt;
+
+        let currentPath = '';
+        for (let i = 0; i < segs.length; i++) {
+          const seg = segs[i];
+          currentPath = currentPath ? `${currentPath}/${seg}` : seg;
+          const isLeaf = i === segs.length - 1;
+          let child = curr.childrenMap.get(seg);
+          if (!child) {
+            child = {
+              name: seg,
+              path: currentPath,
+              compressed: 0,
+              uncompressed: 0,
+              fileCount: 0,
+              classCount: 0,
+              category: cat,
+              childrenMap: isLeaf ? null : new Map(),
+              children: []
+            };
+            curr.childrenMap.set(seg, child);
+          }
+          child.compressed += comp;
+          child.uncompressed += uncomp;
+          child.fileCount += cnt;
+          if (!path.endsWith('.so') && !path.endsWith('.jnilib')) child.classCount += cnt;
+          if (!isLeaf && !child.childrenMap) child.childrenMap = new Map();
+          curr = child;
+        }
+      }
+
+      finalizeTree(root);
+      return root;
+    }
+
+    /**
+     * ============================================================================
+     * 4. 原生 Canvas 嵌套正方化矩形树图引擎 (Squarified Treemap Algorithm)
+     * ============================================================================
+     */
+    const state = {
+      rootNode: null,
+      currentNode: null,
+      zoomPath: [], // 栈记录当前下钻路径
+      metric: 'compressed', // 'compressed' | 'uncompressed'
+      maxDepth: 2,
+      searchQuery: '',
+      hoveredBox: null,
+      renderedBoxes: [], // 保存当前帧所有绘制的矩形块，供鼠标拾取与点击下钻
+      sidebarOpen: true,
+      theme: localStorage.getItem('jar_visualizer_theme') || 'dark'
+    };
+
+    const canvas = document.getElementById('treemapCanvas');
+    const ctx = canvas.getContext('2d');
+    const tooltip = document.getElementById('treemapTooltip');
+
+    function getNodeVal(node) {
+      return state.metric === 'compressed' ? node.compressed : node.uncompressed;
+    }
+
+    /**
+     * 标准 Squarified Treemap 算法：将子节点切分到给定的矩形 rect {x, y, w, h} 中
+     */
+    function computeSquarifiedLayout(children, rect) {
+      if (!children || children.length === 0 || rect.w <= 2 || rect.h <= 2) return [];
+
+      const validChildren = children.filter(c => getNodeVal(c) > 0);
+      if (validChildren.length === 0) return [];
+
+      const totalValue = validChildren.reduce((acc, c) => acc + getNodeVal(c), 0);
+      if (totalValue <= 0) return [];
+
+      const totalArea = rect.w * rect.h;
+      const items = validChildren.map(node => ({
+        node,
+        area: (getNodeVal(node) / totalValue) * totalArea
+      }));
+
+      const results = [];
+      let currentRect = { x: rect.x, y: rect.y, w: rect.w, h: rect.h };
+
+      function worstAspectRatio(row, sideLength) {
+        if (row.length === 0 || sideLength <= 0) return Infinity;
+        let sum = 0;
+        let maxA = 0;
+        let minA = Infinity;
+        for (const item of row) {
+          sum += item.area;
+          if (item.area > maxA) maxA = item.area;
+          if (item.area < minA) minA = item.area;
+        }
+        const s2 = sum * sum;
+        const w2 = sideLength * sideLength;
+        return Math.max((w2 * maxA) / s2, s2 / (w2 * minA));
+      }
+
+      function layoutRow(row) {
+        const sumArea = row.reduce((acc, it) => acc + it.area, 0);
+        const horizontal = currentRect.w >= currentRect.h;
+
+        if (horizontal) {
+          const rowWidth = currentRect.h > 0 ? sumArea / currentRect.h : 0;
+          let yCursor = currentRect.y;
+          for (const item of row) {
+            const itemHeight = rowWidth > 0 ? item.area / rowWidth : 0;
+            results.push({
+              node: item.node,
+              rect: { x: currentRect.x, y: yCursor, w: rowWidth, h: itemHeight }
+            });
+            yCursor += itemHeight;
+          }
+          currentRect = {
+            x: currentRect.x + rowWidth,
+            y: currentRect.y,
+            w: Math.max(0, currentRect.w - rowWidth),
+            h: currentRect.h
+          };
+        } else {
+          const rowHeight = currentRect.w > 0 ? sumArea / currentRect.w : 0;
+          let xCursor = currentRect.x;
+          for (const item of row) {
+            const itemWidth = rowHeight > 0 ? item.area / rowHeight : 0;
+            results.push({
+              node: item.node,
+              rect: { x: xCursor, y: currentRect.y, w: itemWidth, h: rowHeight }
+            });
+            xCursor += itemWidth;
+          }
+          currentRect = {
+            x: currentRect.x,
+            y: currentRect.y + rowHeight,
+            w: currentRect.w,
+            h: Math.max(0, currentRect.h - rowHeight)
+          };
+        }
+      }
+
+      let currentRow = [];
+      for (const item of items) {
+        if (currentRow.length === 0) {
+          currentRow.push(item);
+        } else {
+          const shortSide = Math.min(currentRect.w, currentRect.h);
+          const currentWorst = worstAspectRatio(currentRow, shortSide);
+          const nextWorst = worstAspectRatio([...currentRow, item], shortSide);
+          if (nextWorst <= currentWorst) {
+            currentRow.push(item);
+          } else {
+            layoutRow(currentRow);
+            currentRow = [item];
+          }
+        }
+      }
+      if (currentRow.length > 0) {
+        layoutRow(currentRow);
+      }
+
+      return results;
+    }
+
+    /**
+     * 检查节点或其子树是否匹配当前搜索词
+     */
+    function checkNodeSearchMatch(node, queryLower) {
+      if (!queryLower) return false;
+      if (node.name.toLowerCase().includes(queryLower) || node.path.toLowerCase().includes(queryLower)) {
+        return true;
+      }
+      if (node.children && node.children.length > 0) {
+        for (const c of node.children) {
+          if (checkNodeSearchMatch(c, queryLower)) return true;
+        }
+      }
+      return false;
+    }
+
+    /**
+     * 绘制整个嵌套矩形树图
+     */
+    function renderTreemap() {
+      const container = document.getElementById('canvasContainer');
+      const dpr = window.devicePixelRatio || 1;
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      if (canvas.width !== Math.floor(width * dpr) || canvas.height !== Math.floor(height * dpr)) {
+        canvas.width = Math.floor(width * dpr);
+        canvas.height = Math.floor(height * dpr);
+      }
+
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, width, height);
+
+      // 背景底色
+      const isLight = state.theme === 'light';
+      ctx.fillStyle = isLight ? '#f1f5f9' : '#0b0f19';
+      ctx.fillRect(0, 0, width, height);
+
+      state.renderedBoxes = [];
+      if (!state.currentNode || !state.currentNode.children || state.currentNode.children.length === 0) {
+        ctx.fillStyle = isLight ? '#475569' : '#94a3b8';
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('该节点为叶子文件，无下层子目录（右键点击可返回上一级）', width / 2, height / 2);
+        ctx.restore();
+        return;
+      }
+
+      const queryLower = state.searchQuery.trim().toLowerCase();
+      const hasSearch = queryLower.length > 0;
+
+      function drawLayer(parentNode, rect, depth) {
+        const laidOut = computeSquarifiedLayout(parentNode.children, rect);
+
+        for (const item of laidOut) {
+          const { node, rect: r } = item;
+          if (r.w < 1.5 || r.h < 1.5) continue;
+
+          const pad = depth === 0 ? 2 : 1.5;
+          const bx = r.x + pad;
+          const by = r.y + pad;
+          const bw = Math.max(0, r.w - pad * 2);
+          const bh = Math.max(0, r.h - pad * 2);
+          if (bw <= 0.5 || bh <= 0.5) continue;
+
+          const isDirectMatch = hasSearch && (node.name.toLowerCase().includes(queryLower) || node.path.toLowerCase().includes(queryLower));
+          const hasChildMatch = hasSearch && !isDirectMatch && checkNodeSearchMatch(node, queryLower);
+          const isDimmed = hasSearch && !isDirectMatch && !hasChildMatch;
+
+          const palette = getNodeColorPalette(node, depth, isDirectMatch, isDimmed);
+          const isHovered = state.hoveredBox && state.hoveredBox.node === node;
+
+          const canExpandChildren =
+            depth + 1 < state.maxDepth &&
+            node.children &&
+            node.children.length > 0 &&
+            bw > 56 &&
+            bh > 42;
+
+          // 绘制模块主体背景
+          ctx.fillStyle = palette.fill;
+          ctx.fillRect(bx, by, bw, bh);
+
+          // 悬停高亮框或常规边框
+          ctx.lineWidth = isHovered ? 2 : 1;
+          ctx.strokeStyle = isHovered ? (isLight ? '#0f172a' : '#ffffff') : palette.stroke;
+          ctx.strokeRect(bx, by, bw, bh);
+
+          // 记录盒子用于鼠标交互拾取（越深层的盒子越后推入，反向遍历时优先拾取深层子块）
+          state.renderedBoxes.push({
+            node,
+            rect: { x: bx, y: by, w: bw, h: bh },
+            depth
+          });
+
+          if (canExpandChildren) {
+            const headerH = Math.min(22, Math.max(16, bh * 0.18));
+            ctx.fillStyle = palette.headerFill;
+            ctx.fillRect(bx, by, bw, headerH);
+
+            // 绘制容器顶部标题栏文字
+            if (bw > 40) {
+              ctx.save();
+              ctx.beginPath();
+              ctx.rect(bx + 4, by, bw - 8, headerH);
+              ctx.clip();
+              ctx.fillStyle = palette.text;
+              ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+              ctx.textBaseline = 'middle';
+              ctx.textAlign = 'left';
+              const sizeStr = formatBytes(getNodeVal(node), 1);
+              const labelText = bw > 130 ? `${node.name} (${sizeStr})` : node.name;
+              ctx.fillText(labelText, bx + 5, by + headerH / 2);
+              ctx.restore();
+            }
+
+            // 递归绘制子矩形
+            const innerRect = {
+              x: bx + 2,
+              y: by + headerH + 1,
+              w: bw - 4,
+              h: bh - headerH - 3
+            };
+            if (innerRect.w > 6 && innerRect.h > 6) {
+              drawLayer(node, innerRect, depth + 1);
+            }
+          } else {
+            // 叶子块或达到最大显示深度：居中绘制名称与体积
+            if (bw > 34 && bh > 20) {
+              ctx.save();
+              ctx.beginPath();
+              ctx.rect(bx + 3, by + 2, bw - 6, bh - 4);
+              ctx.clip();
+
+              ctx.fillStyle = palette.text;
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+
+              const fontSize = Math.min(13, Math.max(10, Math.min(bw / 9, bh / 3.2)));
+              ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+
+              const centerX = bx + bw / 2;
+              const centerY = by + bh / 2;
+
+              if (bh > 36 && bw > 54) {
+                ctx.fillText(node.name, centerX, centerY - fontSize * 0.55);
+                ctx.font = `400 ${Math.max(9, fontSize - 1)}px monospace`;
+                ctx.fillStyle = isDirectMatch ? '#1e293b' : (isLight ? 'rgba(15, 23, 42, 0.72)' : 'rgba(241, 245, 249, 0.82)');
+                ctx.fillText(formatBytes(getNodeVal(node), 1), centerX, centerY + fontSize * 0.65);
+              } else {
+                ctx.fillText(node.name, centerX, centerY);
+              }
+              ctx.restore();
+            }
+          }
+        }
+      }
+
+      drawLayer(state.currentNode, { x: 4, y: 4, w: width - 8, h: height - 8 }, 0);
+      ctx.restore();
+    }
+
+    /**
+     * ============================================================================
+     * 5. 界面状态同步：面包屑、侧边栏统计、瘦身诊断与交互事件
+     * ============================================================================
+     */
+    function selectRootJar(rootNode) {
+      state.rootNode = rootNode;
+      state.currentNode = rootNode;
+      state.zoomPath = [rootNode];
+      state.hoveredBox = null;
+
+      document.getElementById('currentFileLabel').textContent = `${rootNode.name} · 共 ${rootNode.fileCount.toLocaleString()} 个条目`;
+      const badge = document.getElementById('jarTypeBadge');
+      badge.textContent = rootNode.jarType;
+      badge.classList.remove('hidden');
+
+      updateBreadcrumbs();
+      updateSidebarStats();
+      runSlimmingDiagnostics();
+      renderTreemap();
+    }
+
+    function zoomToNode(targetNode) {
+      if (!targetNode || targetNode === state.currentNode) return;
+      // 如果点击的是没有子节点的叶子文件，则下钻到其父节点或保持当前视图
+      if (!targetNode.children || targetNode.children.length === 0) {
+        if (targetNode.mavenCoord) {
+          populateMavenExclusion(targetNode);
+        }
+        return;
+      }
+
+      // 构建从 rootNode 到 targetNode 的完整面包屑路径
+      const pathStack = [];
+      function findPath(curr, goal) {
+        pathStack.push(curr);
+        if (curr === goal) return true;
+        if (curr.children) {
+          for (const ch of curr.children) {
+            if (findPath(ch, goal)) return true;
+          }
+        }
+        pathStack.pop();
+        return false;
+      }
+
+      if (findPath(state.rootNode, targetNode)) {
+        state.zoomPath = pathStack;
+      } else {
+        state.zoomPath.push(targetNode);
+      }
+
+      state.currentNode = targetNode;
+      state.hoveredBox = null;
+      tooltip.classList.add('hidden');
+
+      if (targetNode.mavenCoord) {
+        populateMavenExclusion(targetNode);
+      }
+
+      updateBreadcrumbs();
+      updateSidebarStats();
+      renderTreemap();
+    }
+
+    function zoomOutOneLevel() {
+      if (state.zoomPath.length <= 1) return;
+      state.zoomPath.pop();
+      state.currentNode = state.zoomPath[state.zoomPath.length - 1];
+      state.hoveredBox = null;
+      tooltip.classList.add('hidden');
+      updateBreadcrumbs();
+      updateSidebarStats();
+      renderTreemap();
+    }
+
+    function updateBreadcrumbs() {
+      const nav = document.getElementById('breadcrumbNav');
+      nav.innerHTML = '';
+
+      document.getElementById('zoomRootBtn').disabled = state.zoomPath.length <= 1;
+      document.getElementById('zoomOutBtn').disabled = state.zoomPath.length <= 1;
+
+      state.zoomPath.forEach((node, idx) => {
+        if (idx > 0) {
+          const sep = document.createElement('span');
+          sep.className = 'text-slate-600 px-0.5';
+          sep.textContent = '/';
+          nav.appendChild(sep);
+        }
+
+        const btn = document.createElement('button');
+        const isLast = idx === state.zoomPath.length - 1;
+        btn.className = isLast
+          ? 'px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 font-semibold border border-sky-500/30 truncate max-w-[220px]'
+          : 'px-1.5 py-0.5 rounded hover:bg-slate-800 text-slate-300 hover:text-white transition truncate max-w-[160px]';
+        btn.textContent = idx === 0 ? 'JAR Root' : node.name;
+        btn.title = node.path || node.name;
+        btn.addEventListener('click', () => {
+          if (!isLast) {
+            state.zoomPath = state.zoomPath.slice(0, idx + 1);
+            state.currentNode = node;
+            updateBreadcrumbs();
+            updateSidebarStats();
+            renderTreemap();
+          }
+        });
+        nav.appendChild(btn);
+      });
+    }
+
+    function updateSidebarStats() {
+      const curr = state.currentNode;
+      const root = state.rootNode;
+      if (!curr || !root) return;
+
+      const primaryBytes = getNodeVal(curr);
+      const secondaryBytes = state.metric === 'compressed' ? curr.uncompressed : curr.compressed;
+      const ratio = curr.uncompressed > 0 ? Math.round((curr.compressed / curr.uncompressed) * 100) : 100;
+
+      document.getElementById('statTotalSize').textContent = formatBytes(primaryBytes);
+      document.getElementById('statOtherMetricSize').textContent =
+        state.metric === 'compressed'
+          ? `解压实际: ${formatBytes(secondaryBytes)}`
+          : `JAR 压缩: ${formatBytes(secondaryBytes)}`;
+      document.getElementById('statCompressionRatio').textContent = `压缩率 ${ratio}%`;
+
+      document.getElementById('statEntryCount').textContent = curr.fileCount.toLocaleString();
+      document.getElementById('statClassCount').textContent = `含 ${curr.classCount.toLocaleString()} 个 .class`;
+      document.getElementById('statJarCountBadge').textContent = `${root.jarCount} 个依赖 JAR`;
+
+      // 计算整包三大类别体积占比
+      let libBytes = 0;
+      let classesBytes = 0;
+      let metaBytes = 0;
+
+      function tallyCategory(n) {
+        if (!n.children || n.children.length === 0) {
+          const v = getNodeVal(n);
+          if (n.category === 'lib') libBytes += v;
+          else if (n.category === 'meta') metaBytes += v;
+          else classesBytes += v;
+          return;
+        }
+        for (const c of n.children) tallyCategory(c);
+      }
+      tallyCategory(curr);
+
+      const sumCat = Math.max(1, libBytes + classesBytes + metaBytes);
+      const libPct = ((libBytes / sumCat) * 100).toFixed(1);
+      const clsPct = ((classesBytes / sumCat) * 100).toFixed(1);
+      const metaPct = ((metaBytes / sumCat) * 100).toFixed(1);
+
+      document.getElementById('barLib').style.width = `${libPct}%`;
+      document.getElementById('barClasses').style.width = `${clsPct}%`;
+      document.getElementById('barMeta').style.width = `${metaPct}%`;
+
+      document.getElementById('labelLibPct').textContent = `依赖: ${libPct}% (${formatBytes(libBytes, 1)})`;
+      document.getElementById('labelClassesPct').textContent = `业务: ${clsPct}% (${formatBytes(classesBytes, 1)})`;
+      document.getElementById('labelMetaPct').textContent = `其他: ${metaPct}%`;
+      document.getElementById('compositionSummaryText').textContent = curr === root ? '整包范围' : '当前子视图';
+
+      renderRankingList();
+    }
+
+    /**
+     * 渲染右侧体积排行榜列表（支持搜索过滤、一键下钻与生成 Maven Exclusion）
+     */
+    function renderRankingList() {
+      const container = document.getElementById('tabContentRanking');
+      container.innerHTML = '';
+
+      const curr = state.currentNode;
+      if (!curr) return;
+
+      const queryLower = state.searchQuery.trim().toLowerCase();
+      let listNodes = [];
+
+      // 如果当前在根节点且是 Spring Boot JAR，优先提取 BOOT-INF/lib/*.jar 和主要目录进行排行，或者如果正在搜索则递归收集匹配节点
+      if (queryLower) {
+        function collectMatches(n) {
+          if (n !== curr && (n.name.toLowerCase().includes(queryLower) || n.path.toLowerCase().includes(queryLower))) {
+            listNodes.push(n);
+            return; // 命中父容器后避免重复刷屏全部子叶子
+          }
+          if (n.children) {
+            for (const c of n.children) collectMatches(c);
+          }
+        }
+        collectMatches(curr);
+      } else if (curr === state.rootNode && state.rootNode.jarType === 'Spring Boot Fat JAR') {
+        // 汇总 BOOT-INF/lib 下的各个 jar 包 + BOOT-INF/classes 下的直接子模块
+        function collectTopModules(n) {
+          if (n.name.endsWith('.jar') && n.path.startsWith('BOOT-INF/lib/')) {
+            listNodes.push(n);
+            return;
+          }
+          if (n.path === 'BOOT-INF/classes' && n.children) {
+            for (const c of n.children) listNodes.push(c);
+            return;
+          }
+          if (n.children) {
+            for (const c of n.children) collectTopModules(c);
+          }
+        }
+        collectTopModules(curr);
+      } else {
+        listNodes = curr.children ? [...curr.children] : [];
+      }
+
+      listNodes.sort((a, b) => getNodeVal(b) - getNodeVal(a));
+      document.getElementById('rankingCountLabel').textContent = listNodes.length;
+
+      const viewTotal = Math.max(1, getNodeVal(curr));
+      const topSlice = listNodes.slice(0, 80);
+
+      if (topSlice.length === 0) {
+        container.innerHTML = `<div class="p-6 text-center text-xs text-slate-500">未找到匹配的模块或依赖</div>`;
+        return;
+      }
+
+      for (const item of topSlice) {
+        const val = getNodeVal(item);
+        const pct = ((val / viewTotal) * 100).toFixed(1);
+        const isLib = item.category === 'lib';
+        const badgeColor = isLib
+          ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
+          : item.category === 'classes'
+          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+          : 'bg-amber-500/20 text-amber-300 border-amber-500/30';
+
+        const row = document.createElement('div');
+        row.className = 'p-2.5 hover:bg-slate-800/70 transition cursor-pointer group';
+        row.innerHTML = `
+          <div class="flex items-center justify-between gap-2 mb-1">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span class="px-1.5 py-0.2 text-[10px] rounded border ${badgeColor} shrink-0">${isLib ? '依赖' : (item.category === 'classes' ? '代码' : '其它')}</span>
+              <span class="text-xs font-medium text-slate-100 truncate group-hover:text-sky-300 transition" title="${item.path}">${item.name}</span>
+            </div>
+            <span class="text-xs font-mono font-semibold text-white shrink-0">${formatBytes(val, 1)}</span>
+          </div>
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div class="${isLib ? 'bg-indigo-500' : 'bg-emerald-500'} h-full rounded-full" style="width: ${Math.min(100, pct)}%"></div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <span class="text-[10px] font-mono text-slate-400">${pct}%</span>
+              ${item.mavenCoord ? `<button class="exclude-btn px-1.5 py-0.5 rounded bg-slate-800 hover:bg-sky-500 hover:text-slate-950 text-slate-300 border border-slate-700 text-[10px] transition" title="生成 Maven <exclusion> 配置">排除</button>` : ''}
+            </div>
+          </div>
+        `;
+
+        row.addEventListener('click', (e) => {
+          if (e.target.closest('.exclude-btn')) {
+            e.stopPropagation();
+            populateMavenExclusion(item, true);
+            return;
+          }
+          zoomToNode(item);
+        });
+
+        row.addEventListener('mouseenter', () => {
+          const found = state.renderedBoxes.find(b => b.node === item);
+          if (found) {
+            state.hoveredBox = found;
+            renderTreemap();
+          }
+        });
+
+        row.addEventListener('mouseleave', () => {
+          if (state.hoveredBox && state.hoveredBox.node === item) {
+            state.hoveredBox = null;
+            renderTreemap();
+          }
+        });
+
+        container.appendChild(row);
+      }
+    }
+
+    /**
+     * 生成 Maven <exclusion> XML 配置并可自动切换至 XML 面板
+     */
+    function populateMavenExclusion(node, switchToTab = false) {
+      const coord = node.mavenCoord || guessMavenCoordinateFromJarName(node.jarName || node.name);
+      const xml = `<!-- 排除 ${node.jarName || node.name} (${formatBytes(getNodeVal(node))}) -->
+<exclusions>
+    <exclusion>
+        <groupId>${coord.groupId}</groupId>
+        <artifactId>${coord.artifactId}</artifactId>
+    </exclusion>
+</exclusions>`;
+      document.getElementById('mavenExclusionCode').textContent = xml;
+
+      if (switchToTab) {
+        switchSidebarTab('maven');
+        copyTextToClipboard(xml);
+      }
+    }
+
+    /**
+     * 自动扫描整棵 JAR 树，输出可落地的 Spring Boot 瘦身诊断建议
+     */
+    function runSlimmingDiagnostics() {
+      const container = document.getElementById('tabContentDiagnostics');
+      container.innerHTML = '';
+      const findings = [];
+
+      // 1. 检测跨平台原生动态库文件 (.so, .dll, .jnilib, .dylib)
+      const nativeFiles = [];
+      let nativeBytes = 0;
+      // 2. 检测编译期工具意外打入生产包 (lombok, spring-boot-devtools)
+      const devOnlyJars = [];
+      // 3. 检测超大静态资源或字体文件 (.ttf, .otf, .mp4, .pdf, .zip)
+      const bigStaticAssets = [];
+      // 4. 检测著名巨型依赖包 (poi-ooxml-full, bcpkix, netty-all, hutool-all)
+      const fatStarterJars = [];
+
+      function scan(node) {
+        const lower = node.name.toLowerCase();
+        if (!node.children || node.children.length === 0) {
+          if (/\.(so|dll|jnilib|dylib)$/.test(lower)) {
+            nativeFiles.push(node);
+            nativeBytes += getNodeVal(node);
+          } else if (/\.(ttf|otf|woff2|pdf|mp4|png|jpg)$/.test(lower) && getNodeVal(node) > 400 * 1024) {
+            bigStaticAssets.push(node);
+          }
+        }
+        if (lower.endsWith('.jar')) {
+          if (lower.includes('lombok') || lower.includes('devtools') || lower.includes('junit') || lower.includes('mockito')) {
+            devOnlyJars.push(node);
+          }
+          if (lower.includes('poi-ooxml-full') || lower.includes('ooxml-schemas') || lower.includes('netty-all') || lower.includes('hutool-all') || lower.includes('bcprov')) {
+            fatStarterJars.push(node);
+          }
+        }
+        if (node.children) {
+          for (const c of node.children) scan(c);
+        }
+      }
+
+      if (state.rootNode) scan(state.rootNode);
+
+      if (nativeFiles.length > 0) {
+        findings.push({
+          level: 'high',
+          title: `发现 ${nativeFiles.length} 个跨平台原生动态库 (${formatBytes(nativeBytes)})`,
+          desc: `包含 ${nativeFiles.slice(0, 3).map(f => f.name).join(', ')} 等。若生产环境仅部署于 Linux x86_64，可排除 Windows (.dll) 与 macOS (.jnilib) 架构包。`,
+          targetNode: nativeFiles[0]
+        });
+      }
+
+      if (devOnlyJars.length > 0) {
+        const devSize = devOnlyJars.reduce((s, n) => s + getNodeVal(n), 0);
+        findings.push({
+          level: 'high',
+          title: `编译期/测试依赖被打包进生产 JAR (${formatBytes(devSize)})`,
+          desc: `检测到 ${devOnlyJars.map(d => d.name).join(', ')}。建议在 pom.xml 中为其添加 <optional>true</optional> 或在 spring-boot-maven-plugin 中配置 <excludeGroupIds>org.projectlombok</excludeGroupIds>。`,
+          targetNode: devOnlyJars[0]
+        });
+      }
+
+      if (fatStarterJars.length > 0) {
+        for (const fat of fatStarterJars) {
+          let tip = '该依赖包含全量模块，建议按需引入子模块。';
+          if (fat.name.includes('poi-ooxml-full')) {
+            tip = 'poi-ooxml-full 包含全量 Office XML Schema（常达 15MB+），普通读写 Excel 替换为精简版 poi-ooxml-lite 可直接缩减 70% 体积。';
+          } else if (fat.name.includes('netty-all')) {
+            tip = 'netty-all 聚合了所有传输协议与多平台 native 库，建议仅引入 netty-transport 与 netty-codec-http2。';
+          } else if (fat.name.includes('hutool-all')) {
+            tip = 'hutool-all 聚合了全部工具包，按需只引入 hutool-core / hutool-http 可显著减小体积。';
+          }
+          findings.push({
+            level: 'medium',
+            title: `巨型全量依赖：${fat.name} (${formatBytes(getNodeVal(fat))})`,
+            desc: tip,
+            targetNode: fat
+          });
+        }
+      }
+
+      if (bigStaticAssets.length > 0) {
+        const assetSize = bigStaticAssets.reduce((s, n) => s + getNodeVal(n), 0);
+        findings.push({
+          level: 'low',
+          title: `大体积静态资源/字体文件 (${formatBytes(assetSize)})`,
+          desc: `发现 ${bigStaticAssets.map(a => a.name).join(', ')}。建议将中文字体包、PDF 模板或前端构建产物抽离至 OSS/CDN 或独立挂载卷。`,
+          targetNode: bigStaticAssets[0]
+        });
+      }
+
+      document.getElementById('diagBadge').textContent = findings.length;
+
+      if (findings.length === 0) {
+        container.innerHTML = `<div class="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-300">未检测到明显的冗余跨平台动态库或编译期依赖，当前 JAR 结构非常精简！</div>`;
+        return;
+      }
+
+      for (const item of findings) {
+        const card = document.createElement('div');
+        const borderCls = item.level === 'high' ? 'border-rose-500/40 bg-rose-500/10' : (item.level === 'medium' ? 'border-amber-500/40 bg-amber-500/10' : 'border-sky-500/40 bg-sky-500/10');
+        const titleCls = item.level === 'high' ? 'text-rose-300' : (item.level === 'medium' ? 'text-amber-300' : 'text-sky-300');
+
+        card.className = `p-3 rounded-lg border ${borderCls} text-xs space-y-1.5 cursor-pointer hover:brightness-110 transition`;
+        card.innerHTML = `
+          <div class="font-bold ${titleCls} flex items-center justify-between">
+            <span>${item.title}</span>
+            <span class="text-[10px] underline opacity-80">定位查看 →</span>
+          </div>
+          <p class="text-[11px] text-slate-300 leading-relaxed">${item.desc}</p>
+        `;
+        card.addEventListener('click', () => {
+          if (item.targetNode) zoomToNode(item.targetNode);
+        });
+        container.appendChild(card);
+      }
+    }
+
+    /**
+     * 侧边栏 Tab 切换
+     */
+    function switchSidebarTab(tabName) {
+      document.querySelectorAll('.sidebar-tab').forEach(btn => {
+        const active = btn.dataset.tab === tabName;
+        btn.className = active
+          ? 'sidebar-tab flex-1 py-2.5 font-semibold text-sky-400 border-b-2 border-sky-400 transition flex items-center justify-center gap-1'
+          : 'sidebar-tab flex-1 py-2.5 font-medium text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition flex items-center justify-center gap-1';
+      });
+      document.getElementById('tabContentRanking').classList.toggle('hidden', tabName !== 'ranking');
+      document.getElementById('tabContentDiagnostics').classList.toggle('hidden', tabName !== 'diagnostics');
+      document.getElementById('tabContentMaven').classList.toggle('hidden', tabName !== 'maven');
+    }
+
+    /**
+     * ============================================================================
+     * 6. 鼠标悬停拾取、点击下钻、右键返回与文件拖拽上传绑定
+     * ============================================================================
+     */
+    function findBoxAtPoint(x, y) {
+      // 从后往前遍历，优先命中绘制在最上层的深层子矩形块
+      for (let i = state.renderedBoxes.length - 1; i >= 0; i--) {
+        const b = state.renderedBoxes[i];
+        const r = b.rect;
+        if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
+          return b;
+        }
+      }
+      return null;
+    }
+
+    canvas.addEventListener('mousemove', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      const hit = findBoxAtPoint(x, y);
+      if (hit !== state.hoveredBox) {
+        state.hoveredBox = hit;
+        renderTreemap();
+      }
+
+      if (hit && hit.node) {
+        const n = hit.node;
+        tooltip.classList.remove('hidden');
+
+        // 更新 Tooltip 内容
+        const catMap = {
+          lib: ['第三方依赖 (BOOT-INF/lib)', 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'],
+          classes: ['业务代码与资源 (classes)', 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'],
+          meta: ['META-INF 与 Loader', 'bg-amber-500/20 text-amber-300 border-amber-500/30']
+        };
+        const [catText, catCls] = catMap[n.category] || catMap.classes;
+        const badgeEl = document.getElementById('ttCategoryBadge');
+        badgeEl.textContent = catText;
+        badgeEl.className = `px-1.5 py-0.5 text-[10px] font-semibold rounded border ${catCls}`;
+
+        document.getElementById('ttFileCount').textContent = `${n.fileCount.toLocaleString()} 个文件`;
+        document.getElementById('ttTitle').textContent = n.name;
+        document.getElementById('ttPath').textContent = n.path;
+        document.getElementById('ttCompressed').textContent = formatBytes(n.compressed);
+        document.getElementById('ttUncompressed').textContent = formatBytes(n.uncompressed);
+
+        const viewTotal = Math.max(1, getNodeVal(state.currentNode));
+        const rootTotal = Math.max(1, getNodeVal(state.rootNode));
+        const nodeVal = getNodeVal(n);
+
+        document.getElementById('ttViewPct').textContent = `${((nodeVal / viewTotal) * 100).toFixed(2)}%`;
+        document.getElementById('ttTotalPct').textContent = `${((nodeVal / rootTotal) * 100).toFixed(2)}%`;
+
+        const hasSub = n.children && n.children.length > 0;
+        document.getElementById('ttHint').innerHTML = hasSub
+          ? `<span>左键点击下钻查看内部 (${n.children.length} 个子项)</span><span class="text-slate-400">右键返回</span>`
+          : `<span class="text-emerald-300">已达叶子文件节点</span><span class="text-slate-400">右键返回上级</span>`;
+
+        // 智能防溢出定位
+        const ttW = tooltip.offsetWidth || 300;
+        const ttH = tooltip.offsetHeight || 190;
+        let left = e.clientX + 16;
+        let top = e.clientY + 16;
+        if (left + ttW > window.innerWidth - 12) left = e.clientX - ttW - 16;
+        if (top + ttH > window.innerHeight - 12) top = e.clientY - ttH - 16;
+        tooltip.style.left = `${Math.max(8, left)}px`;
+        tooltip.style.top = `${Math.max(8, top)}px`;
+      } else {
+        tooltip.classList.add('hidden');
+      }
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      state.hoveredBox = null;
+      tooltip.classList.add('hidden');
+      renderTreemap();
+    });
+
+    // 左键点击下钻
+    canvas.addEventListener('click', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const hit = findBoxAtPoint(e.clientX - rect.left, e.clientY - rect.top);
+      if (!hit) return;
+
+      // 如果点击的是第 1 层以后的深层节点，默认先下钻到它的顶层容器或直接下钻到该节点
+      zoomToNode(hit.node);
+    });
+
+    // 右键点击返回上一级
+    canvas.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      zoomOutOneLevel();
+    });
+
+    // 鼠标滚轮快速调整嵌套显示深度
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const select = document.getElementById('depthSelect');
+      let d = state.maxDepth + (e.deltaY < 0 ? 1 : -1);
+      d = Math.max(1, Math.min(4, d));
+      if (d !== state.maxDepth) {
+        state.maxDepth = d;
+        select.value = String(d);
+        renderTreemap();
+      }
+    }, { passive: false });
+
+    // 键盘快捷键支持
+    window.addEventListener('keydown', (e) => {
+      if (document.activeElement === document.getElementById('searchInput')) {
+        if (e.key === 'Escape') {
+          document.getElementById('searchInput').blur();
+        }
+        return;
+      }
+      if (e.key === 'Escape' || e.key === 'Backspace') {
+        zoomOutOneLevel();
+      } else if (e.key === 'Home') {
+        if (state.rootNode) zoomToNode(state.rootNode);
+      }
+    });
+
+    // 处理用户本地上传或拖入的 .jar / .war / .zip 文件
+    async function handleLocalJarFile(file) {
+      if (!file) return;
+      try {
+        const startTime = performance.now();
+        const buffer = await file.arrayBuffer();
+        const root = buildJarHierarchy(file.name, buffer);
+        const costMs = (performance.now() - startTime).toFixed(1);
+
+        document.getElementById('welcomeBanner').classList.add('hidden');
+        selectRootJar(root);
+        showToast(`解析完成 (${costMs} ms)：共读取 ${root.fileCount.toLocaleString()} 个条目，穿透 ${root.jarCount} 个依赖 JAR`);
+      } catch (err) {
+        showToast(err.message || '解析文件失败，请确认为标准 JAR / ZIP 格式');
+      }
+    }
+
+    // 绑定控件事件
+    document.getElementById('jarFileInput').addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) {
+        handleLocalJarFile(e.target.files[0]);
+        e.target.value = '';
+      }
+    });
+
+    // 全屏拖拽事件
+    let dragCounter = 0;
+    const dropOverlay = document.getElementById('globalDropOverlay');
+
+    window.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      dragCounter++;
+      dropOverlay.classList.remove('hidden');
+    });
+
+    window.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    });
+
+    window.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      dragCounter--;
+      if (dragCounter <= 0) {
+        dragCounter = 0;
+        dropOverlay.classList.add('hidden');
+      }
+    });
+
+    window.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dragCounter = 0;
+      dropOverlay.classList.add('hidden');
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleLocalJarFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    // 统计口径切换按钮
+    const btnComp = document.getElementById('metricCompressedBtn');
+    const btnUncomp = document.getElementById('metricUncompressedBtn');
+
+    btnComp.addEventListener('click', () => {
+      state.metric = 'compressed';
+      btnComp.className = 'px-2.5 py-1 rounded-md font-medium bg-sky-500 text-slate-950 transition';
+      btnUncomp.className = 'px-2.5 py-1 rounded-md font-medium text-slate-300 hover:text-white transition';
+      updateSidebarStats();
+      renderTreemap();
+    });
+
+    btnUncomp.addEventListener('click', () => {
+      state.metric = 'uncompressed';
+      btnUncomp.className = 'px-2.5 py-1 rounded-md font-medium bg-emerald-500 text-slate-950 transition';
+      btnComp.className = 'px-2.5 py-1 rounded-md font-medium text-slate-300 hover:text-white transition';
+      updateSidebarStats();
+      renderTreemap();
+    });
+
+    // 嵌套深度选择
+    document.getElementById('depthSelect').addEventListener('change', (e) => {
+      state.maxDepth = parseInt(e.target.value, 10) || 2;
+      renderTreemap();
+    });
+
+    // 实时搜索框
+    const searchInput = document.getElementById('searchInput');
+    const clearSearchBtn = document.getElementById('clearSearchBtn');
+
+    searchInput.addEventListener('input', (e) => {
+      state.searchQuery = e.target.value;
+      clearSearchBtn.classList.toggle('hidden', !state.searchQuery);
+      renderRankingList();
+      renderTreemap();
+    });
+
+    clearSearchBtn.addEventListener('click', () => {
+      state.searchQuery = '';
+      searchInput.value = '';
+      clearSearchBtn.classList.add('hidden');
+      renderRankingList();
+      renderTreemap();
+    });
+
+    // 导航与侧边栏控制
+    document.getElementById('zoomRootBtn').addEventListener('click', () => {
+      if (state.rootNode) zoomToNode(state.rootNode);
+    });
+    document.getElementById('zoomOutBtn').addEventListener('click', zoomOutOneLevel);
+
+    document.getElementById('toggleSidebarBtn').addEventListener('click', () => {
+      const panel = document.getElementById('sidebarPanel');
+      state.sidebarOpen = !state.sidebarOpen;
+      panel.classList.toggle('hidden', !state.sidebarOpen);
+      setTimeout(renderTreemap, 50);
+    });
+
+    document.querySelectorAll('.sidebar-tab').forEach(btn => {
+      btn.addEventListener('click', () => switchSidebarTab(btn.dataset.tab));
+    });
+
+    document.getElementById('copyMavenXmlBtn').addEventListener('click', () => {
+      copyTextToClipboard(document.getElementById('mavenExclusionCode').textContent);
+    });
+
+    document.getElementById('loadDemoBtn').addEventListener('click', () => {
+      selectRootJar(createMockSpringBootJar());
+      showToast('已加载内置 Spring Boot Fat JAR 示例项目');
+    });
+
+    document.getElementById('switchShadeDemoBtn').addEventListener('click', () => {
+      selectRootJar(createMockShadeJar());
+      showToast('已切换为 Maven Shade Uber-JAR 示例项目');
+    });
+
+    document.getElementById('dismissWelcomeBtn').addEventListener('click', () => {
+      document.getElementById('welcomeBanner').classList.add('hidden');
+    });
+
+    function applyTheme(theme, showNotice = false) {
+      state.theme = theme === 'light' ? 'light' : 'dark';
+      const rootEl = document.documentElement;
+      const isLight = state.theme === 'light';
+
+      rootEl.classList.toggle('light', isLight);
+      rootEl.classList.toggle('dark', !isLight);
+
+      const sunIcon = document.getElementById('themeIconSun');
+      const moonIcon = document.getElementById('themeIconMoon');
+      const labelEl = document.getElementById('themeToggleLabel');
+
+      if (sunIcon && moonIcon && labelEl) {
+        sunIcon.classList.toggle('hidden', isLight);
+        moonIcon.classList.toggle('hidden', !isLight);
+        labelEl.textContent = isLight ? '深色' : '浅色';
+      }
+
+      try {
+        localStorage.setItem('jar_visualizer_theme', state.theme);
+      } catch (e) {}
+
+      renderTreemap();
+      if (showNotice) {
+        showToast(isLight ? '已切换为浅色主题' : '已切换为深色主题');
+      }
+    }
+
+    document.getElementById('themeToggleBtn').addEventListener('click', () => {
+      applyTheme(state.theme === 'dark' ? 'light' : 'dark', true);
+    });
+
+    window.addEventListener('resize', () => {
+      renderTreemap();
+    });
+
+    // 页面加载完成后默认初始化内置模拟 Spring Boot 生产包与主题偏好
+    window.onload = function () {
+      applyTheme(state.theme, false);
+      selectRootJar(createMockSpringBootJar());
+    };
+  </script>
+</body>
+</html>
